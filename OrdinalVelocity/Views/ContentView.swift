@@ -7,6 +7,11 @@ struct ContentView: View {
     @State private var highlightedIndex = 0
     @FocusState private var editorFocus: EditorFocusTarget?
 
+    /// Ranked once here and passed into the sidebar so both stay in sync.
+    private var rankedNotes: [RankedNote] {
+        FuzzySearch.rank(store.notes, query: searchText)
+    }
+
     var body: some View {
         Group {
             if store.hasFolder {
@@ -35,10 +40,11 @@ struct ContentView: View {
     private var mainLayout: some View {
         HStack(spacing: 0) {
             SidebarView(
-                store: store,
+                rankedNotes: rankedNotes,
                 searchText: $searchText,
                 highlightedIndex: $highlightedIndex,
                 editorFocus: $editorFocus,
+                selectedNoteID: store.selectedNoteID,
                 onMoveHighlight: moveHighlight,
                 onOpenHighlightedIntoBody: openHighlightedIntoBody,
                 onCreateFromSearch: createFromSearch,
@@ -65,13 +71,6 @@ struct ContentView: View {
             editorFocus = .search
             syncSelectionToHighlight()
         }
-        .background {
-            Button("") { focusSearch() }
-                .keyboardShortcut("k", modifiers: .command)
-                .opacity(0)
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-        }
     }
 
     private func focusSearch() {
@@ -81,13 +80,8 @@ struct ContentView: View {
         }
     }
 
-    private func rankedNotes() -> [RankedNote] {
-        FuzzySearch.rank(store.notes, query: searchText)
-    }
-
     private func moveHighlight(by delta: Int) {
-        let ranked = rankedNotes()
-        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
+        let navigable = FuzzySearch.navigableIndices(in: rankedNotes, query: searchText)
         guard !navigable.isEmpty else {
             highlightedIndex = 0
             return
@@ -95,31 +89,27 @@ struct ContentView: View {
 
         let currentPos = navigable.firstIndex(of: highlightedIndex) ?? 0
         let nextPos = min(max(currentPos + delta, 0), navigable.count - 1)
-        let nextIndex = navigable[nextPos]
-        highlightedIndex = nextIndex
-        store.select(ranked[nextIndex].note)
+        selectIndex(navigable[nextPos])
     }
 
     private func selectIndex(_ index: Int) {
-        let ranked = rankedNotes()
-        guard ranked.indices.contains(index) else { return }
+        guard rankedNotes.indices.contains(index) else { return }
         highlightedIndex = index
-        store.select(ranked[index].note)
+        store.select(rankedNotes[index].note)
     }
 
     private func openHighlightedIntoBody() {
-        let ranked = rankedNotes()
-        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
+        let navigable = FuzzySearch.navigableIndices(in: rankedNotes, query: searchText)
         guard !navigable.isEmpty else { return }
 
         if !navigable.contains(highlightedIndex) {
             highlightedIndex = navigable[0]
         }
-        guard ranked.indices.contains(highlightedIndex) else { return }
+        guard rankedNotes.indices.contains(highlightedIndex) else { return }
 
-        store.select(ranked[highlightedIndex].note)
+        store.select(rankedNotes[highlightedIndex].note)
         editorFocus = .body
-        // Defer so the body view exists / selection syncs before caret placement.
+        // Defer so the body view exists and the title field can resign first.
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .focusNoteBodyAtEnd, object: nil)
         }
@@ -130,8 +120,7 @@ struct ContentView: View {
         guard !title.isEmpty else { return }
         if let note = store.createNote(title: title) {
             searchText = note.title
-            let ranked = rankedNotes()
-            if let idx = ranked.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
+            if let idx = rankedNotes.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
                 highlightedIndex = idx
             }
             store.select(note)
@@ -139,12 +128,10 @@ struct ContentView: View {
     }
 
     private func syncSelectionToHighlight() {
-        let ranked = rankedNotes()
-        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
-        guard let first = navigable.first, ranked.indices.contains(first) else { return }
+        let navigable = FuzzySearch.navigableIndices(in: rankedNotes, query: searchText)
+        guard let first = navigable.first else { return }
         if store.selectedNoteID == nil {
-            highlightedIndex = first
-            store.select(ranked[first].note)
+            selectIndex(first)
         }
     }
 }

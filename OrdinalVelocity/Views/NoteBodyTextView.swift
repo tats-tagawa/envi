@@ -1,16 +1,7 @@
 import AppKit
 import SwiftUI
 
-enum EditorFocusTarget: Hashable {
-    case search
-    case title
-    case body
-}
-
-extension Notification.Name {
-    static let focusNoteBodyAtEnd = Notification.Name("OrdinalVelocity.focusNoteBodyAtEnd")
-}
-
+/// NSTextView that reports when it becomes first responder (keeps SwiftUI focus in sync).
 final class FocusAwareTextView: NSTextView {
     var onBecomeFirstResponder: (() -> Void)?
 
@@ -23,7 +14,7 @@ final class FocusAwareTextView: NSTextView {
     }
 }
 
-/// Multiline note body backed by NSTextView so we can place the caret at the end on demand.
+/// Multiline note body. Uses NSTextView so we can place the caret at the end on demand.
 struct NoteBodyTextView: NSViewRepresentable {
     @Binding var text: String
     var isFocused: Bool
@@ -54,7 +45,10 @@ struct NoteBodyTextView: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(
+            width: contentSize.width,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.textContainer?.widthTracksTextView = true
         textView.string = text
         textView.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in
@@ -117,6 +111,7 @@ struct NoteBodyTextView: NSViewRepresentable {
 
         @objc func handleFocusAtEnd(_ notification: Notification) {
             guard let textView else { return }
+            // Async so this runs after the title field has resigned first responder.
             DispatchQueue.main.async {
                 textView.window?.makeFirstResponder(textView)
                 let length = (textView.string as NSString).length
