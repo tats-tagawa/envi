@@ -17,6 +17,7 @@
 		A10000000000000000000008 /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* NoteEditorView.swift */; };
 		A10000000000000000000009 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* StatusBarView.swift */; };
 		A1000000000000000000000A /* FolderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* FolderPickerView.swift */; };
+		A1000000000000000000000C /* NoteBodyTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* NoteBodyTextView.swift */; };
 		A1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +32,7 @@
 		A20000000000000000000008 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000A /* FolderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* NoteBodyTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteBodyTextView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A2000000000000000000000C /* OrdinalVelocity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OrdinalVelocity.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* OrdinalVelocity.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrdinalVelocity.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -102,6 +104,7 @@
 				A20000000000000000000008 /* NoteEditorView.swift */,
 				A20000000000000000000009 /* StatusBarView.swift */,
 				A2000000000000000000000A /* FolderPickerView.swift */,
+				A2000000000000000000000D /* NoteBodyTextView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -185,6 +188,7 @@
 				A10000000000000000000008 /* NoteEditorView.swift in Sources */,
 				A10000000000000000000009 /* StatusBarView.swift in Sources */,
 				A1000000000000000000000A /* FolderPickerView.swift in Sources */,
+				A1000000000000000000000C /* NoteBodyTextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

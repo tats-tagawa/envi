@@ -5,7 +5,7 @@ struct ContentView: View {
     @Bindable var store: NotesFolderStore
     @State private var searchText = ""
     @State private var highlightedIndex = 0
-    @FocusState private var searchFocused: Bool
+    @FocusState private var editorFocus: EditorFocusTarget?
 
     var body: some View {
         Group {
@@ -38,10 +38,11 @@ struct ContentView: View {
                 store: store,
                 searchText: $searchText,
                 highlightedIndex: $highlightedIndex,
-                searchFocused: $searchFocused,
+                editorFocus: $editorFocus,
                 onMoveHighlight: moveHighlight,
-                onOpenHighlighted: openHighlighted,
-                onCreateFromSearch: createFromSearch
+                onOpenHighlightedIntoBody: openHighlightedIntoBody,
+                onCreateFromSearch: createFromSearch,
+                onSelectIndex: selectIndex
             )
             .frame(width: 280)
             .frame(maxHeight: .infinity)
@@ -49,15 +50,20 @@ struct ContentView: View {
             Divider()
 
             VStack(spacing: 0) {
-                NoteEditorView(store: store, note: store.selectedNote)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                NoteEditorView(
+                    store: store,
+                    note: store.selectedNote,
+                    editorFocus: $editorFocus
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 StatusBarView(note: store.selectedNote)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
-            searchFocused = true
+            editorFocus = .search
+            syncSelectionToHighlight()
         }
         .background {
             Button("") { focusSearch() }
@@ -69,29 +75,54 @@ struct ContentView: View {
     }
 
     private func focusSearch() {
-        searchFocused = true
+        editorFocus = .search
         DispatchQueue.main.async {
             NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
         }
     }
 
-    private func filteredNotes() -> [Note] {
-        FuzzySearch.filter(store.notes, query: searchText)
+    private func rankedNotes() -> [RankedNote] {
+        FuzzySearch.rank(store.notes, query: searchText)
     }
 
     private func moveHighlight(by delta: Int) {
-        let items = filteredNotes()
-        guard !items.isEmpty else {
+        let ranked = rankedNotes()
+        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
+        guard !navigable.isEmpty else {
             highlightedIndex = 0
             return
         }
-        highlightedIndex = min(max(highlightedIndex + delta, 0), items.count - 1)
+
+        let currentPos = navigable.firstIndex(of: highlightedIndex) ?? 0
+        let nextPos = min(max(currentPos + delta, 0), navigable.count - 1)
+        let nextIndex = navigable[nextPos]
+        highlightedIndex = nextIndex
+        store.select(ranked[nextIndex].note)
     }
 
-    private func openHighlighted() {
-        let items = filteredNotes()
-        guard items.indices.contains(highlightedIndex) else { return }
-        store.select(items[highlightedIndex])
+    private func selectIndex(_ index: Int) {
+        let ranked = rankedNotes()
+        guard ranked.indices.contains(index) else { return }
+        highlightedIndex = index
+        store.select(ranked[index].note)
+    }
+
+    private func openHighlightedIntoBody() {
+        let ranked = rankedNotes()
+        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
+        guard !navigable.isEmpty else { return }
+
+        if !navigable.contains(highlightedIndex) {
+            highlightedIndex = navigable[0]
+        }
+        guard ranked.indices.contains(highlightedIndex) else { return }
+
+        store.select(ranked[highlightedIndex].note)
+        editorFocus = .body
+        // Defer so the body view exists / selection syncs before caret placement.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .focusNoteBodyAtEnd, object: nil)
+        }
     }
 
     private func createFromSearch() {
@@ -99,9 +130,21 @@ struct ContentView: View {
         guard !title.isEmpty else { return }
         if let note = store.createNote(title: title) {
             searchText = note.title
-            if let idx = filteredNotes().firstIndex(where: { $0.fileURL == note.fileURL }) {
+            let ranked = rankedNotes()
+            if let idx = ranked.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
                 highlightedIndex = idx
             }
+            store.select(note)
+        }
+    }
+
+    private func syncSelectionToHighlight() {
+        let ranked = rankedNotes()
+        let navigable = FuzzySearch.navigableIndices(in: ranked, query: searchText)
+        guard let first = navigable.first, ranked.indices.contains(first) else { return }
+        if store.selectedNoteID == nil {
+            highlightedIndex = first
+            store.select(ranked[first].note)
         }
     }
 }

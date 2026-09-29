@@ -3,6 +3,7 @@ import SwiftUI
 struct NoteEditorView: View {
     @Bindable var store: NotesFolderStore
     let note: Note?
+    var editorFocus: FocusState<EditorFocusTarget?>.Binding
 
     @State private var titleText = ""
     @State private var bodyText = ""
@@ -15,28 +16,37 @@ struct NoteEditorView: View {
                     TextField("Title", text: $titleText)
                         .textFieldStyle(.plain)
                         .font(.title2.weight(.semibold))
+                        .focused(editorFocus, equals: .title)
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
                         .padding(.bottom, 8)
                         .onSubmit {
                             commitTitle(for: note.fileURL)
+                            focusBodyAtEnd()
                         }
 
                     Divider()
 
-                    TextEditor(text: $bodyText)
-                        .font(.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .onChange(of: bodyText) { _, newValue in
+                    NoteBodyTextView(
+                        text: $bodyText,
+                        isFocused: editorFocus.wrappedValue == .body,
+                        onBecameFirstResponder: {
+                            if editorFocus.wrappedValue != .body {
+                                editorFocus.wrappedValue = .body
+                            }
+                        },
+                        onTextChange: { newValue in
                             guard editingNoteID == note.fileURL else { return }
                             store.updateBody(newValue, for: note.fileURL)
                         }
+                    )
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .onChange(of: titleText) { _, _ in
-                    // Title is committed on submit / blur via onSubmit; also sync when leaving note.
+                .onChange(of: editorFocus.wrappedValue) { oldValue, newValue in
+                    if oldValue == .title, newValue != .title {
+                        commitTitle(for: note.fileURL)
+                    }
                 }
                 .onDisappear {
                     if let id = editingNoteID {
@@ -61,7 +71,6 @@ struct NoteEditorView: View {
             syncFromNote()
         }
         .onChange(of: note?.body) { _, newBody in
-            // External reload: update editor if we aren't mid-edit debounce for same content source.
             guard let newBody, let note, editingNoteID == note.fileURL else { return }
             if bodyText != newBody {
                 bodyText = newBody
@@ -73,6 +82,11 @@ struct NoteEditorView: View {
                 titleText = newTitle
             }
         }
+    }
+
+    private func focusBodyAtEnd() {
+        editorFocus.wrappedValue = .body
+        NotificationCenter.default.post(name: .focusNoteBodyAtEnd, object: nil)
     }
 
     private func syncFromNote() {
@@ -91,5 +105,9 @@ struct NoteEditorView: View {
         let trimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         store.updateTitle(trimmed, for: noteID)
+        if let selected = store.selectedNote {
+            editingNoteID = selected.fileURL
+            titleText = selected.title
+        }
     }
 }

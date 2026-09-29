@@ -1,27 +1,53 @@
 import Foundation
 
+struct RankedNote: Identifiable, Hashable, Sendable {
+    var id: URL { note.fileURL }
+    var note: Note
+    var matchesQuery: Bool
+    var score: Int
+}
+
 enum FuzzySearch {
-    /// Returns notes ranked by fuzzy score (best first). Empty query → sorted by updatedAt desc.
-    static func filter(_ notes: [Note], query: String) -> [Note] {
+    /// Empty query → all notes by updatedAt desc (all match).
+    /// Non-empty → matches first (by score), then non-matches (updatedAt desc). All notes stay visible.
+    static func rank(_ notes: [Note], query: String) -> [RankedNote] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return notes.sorted { $0.updatedAt > $1.updatedAt }
+            return notes
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .map { RankedNote(note: $0, matchesQuery: true, score: 0) }
         }
 
-        let scored: [(Note, Int)] = notes.compactMap { note in
+        var matches: [RankedNote] = []
+        var nonMatches: [RankedNote] = []
+
+        for note in notes {
             let titleScore = score(query: trimmed, in: note.title)
             let bodyScore = score(query: trimmed, in: note.body)
             let best = max(titleScore.map { $0 * 2 } ?? -1, bodyScore ?? -1)
-            guard best >= 0 else { return nil }
-            return (note, best)
+            if best >= 0 {
+                matches.append(RankedNote(note: note, matchesQuery: true, score: best))
+            } else {
+                nonMatches.append(RankedNote(note: note, matchesQuery: false, score: -1))
+            }
         }
 
-        return scored
-            .sorted { lhs, rhs in
-                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
-                return lhs.0.updatedAt > rhs.0.updatedAt
-            }
-            .map(\.0)
+        matches.sort { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.note.updatedAt > rhs.note.updatedAt
+        }
+        nonMatches.sort { $0.note.updatedAt > $1.note.updatedAt }
+
+        return matches + nonMatches
+    }
+
+    /// Indices into `ranked` that are navigable (matches when querying; all when idle).
+    static func navigableIndices(in ranked: [RankedNote], query: String) -> [Int] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return Array(ranked.indices)
+        }
+        return ranked.indices.filter { ranked[$0].matchesQuery }
     }
 
     /// Higher is better. `nil` means no match.
@@ -60,7 +86,6 @@ enum FuzzySearch {
 
         guard qi == q.count else { return nil }
 
-        // Prefer tighter matches (fewer gaps relative to query length).
         if let last = lastMatchIndex {
             let span = last + 1
             score += max(0, 40 - (span - q.count))

@@ -4,37 +4,41 @@ struct SidebarView: View {
     @Bindable var store: NotesFolderStore
     @Binding var searchText: String
     @Binding var highlightedIndex: Int
-    var searchFocused: FocusState<Bool>.Binding
+    var editorFocus: FocusState<EditorFocusTarget?>.Binding
     var onMoveHighlight: (Int) -> Void
-    var onOpenHighlighted: () -> Void
+    var onOpenHighlightedIntoBody: () -> Void
     var onCreateFromSearch: () -> Void
+    var onSelectIndex: (Int) -> Void
 
-    private var filtered: [Note] {
-        FuzzySearch.filter(store.notes, query: searchText)
+    private var ranked: [RankedNote] {
+        FuzzySearch.rank(store.notes, query: searchText)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             TextField("Search or create…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .focused(searchFocused)
+                .focused(editorFocus, equals: .search)
                 .padding(8)
                 .onKeyPress { keyPress in
                     handleKey(keyPress)
                 }
 
-            List(Array(filtered.enumerated()), id: \.element.id) { index, note in
-                NoteRow(note: note, isHighlighted: index == highlightedIndex)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        highlightedIndex = index
-                        store.select(note)
-                    }
-                    .listRowBackground(
-                        index == highlightedIndex
-                            ? Color.accentColor.opacity(0.2)
-                            : Color.clear
-                    )
+            List(Array(ranked.enumerated()), id: \.element.id) { index, rankedNote in
+                NoteRow(
+                    note: rankedNote.note,
+                    isHighlighted: index == highlightedIndex,
+                    matchesQuery: rankedNote.matchesQuery
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelectIndex(index)
+                }
+                .listRowBackground(
+                    index == highlightedIndex
+                        ? Color.accentColor.opacity(0.2)
+                        : Color.clear
+                )
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -73,7 +77,7 @@ struct SidebarView: View {
             if keyPress.modifiers.contains(.command) {
                 onCreateFromSearch()
             } else {
-                onOpenHighlighted()
+                onOpenHighlightedIntoBody()
             }
             return .handled
         }
@@ -81,32 +85,40 @@ struct SidebarView: View {
     }
 
     private func reconcileHighlight(keeping preferredID: URL?) {
-        let items = filtered
-        guard !items.isEmpty else {
+        let items = ranked
+        let navigable = FuzzySearch.navigableIndices(in: items, query: searchText)
+        guard !navigable.isEmpty else {
             highlightedIndex = 0
             return
         }
-        if let preferredID, let idx = items.firstIndex(where: { $0.fileURL == preferredID }) {
+        if let preferredID,
+           let idx = items.firstIndex(where: { $0.note.fileURL == preferredID }),
+           navigable.contains(idx) {
             highlightedIndex = idx
+        } else if navigable.contains(highlightedIndex) {
+            // keep
         } else {
-            highlightedIndex = min(max(highlightedIndex, 0), items.count - 1)
+            highlightedIndex = navigable[0]
         }
+        onSelectIndex(highlightedIndex)
     }
 }
 
 private struct NoteRow: View {
     let note: Note
     let isHighlighted: Bool
+    let matchesQuery: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(note.title)
                 .font(.body.weight(isHighlighted ? .semibold : .regular))
+                .foregroundStyle(matchesQuery ? Color.primary : Color.secondary)
                 .lineLimit(1)
             if !note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(note.body)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
                     .lineLimit(1)
             }
         }
