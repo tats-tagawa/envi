@@ -1,12 +1,22 @@
 {
   "images" : [
     {
+      "filename" : "AppIcon.png",
       "idiom" : "mac",
-      "scale" : "1x"
+      "platform" : "macos",
+      "size" : "1024x1024"
     },
     {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "AppIcon-Dark.png",
       "idiom" : "mac",
-      "scale" : "2x"
+      "platform" : "macos",
+      "size" : "1024x1024"
     }
   ],
   "info" : {
