@@ -1,26 +1,188 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "AppIcon.png",
-      "idiom" : "mac",
-      "platform" : "macos",
-      "size" : "1024x1024"
+      "filename": "light_16_16_1x_16.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "16x16"
     },
     {
-      "appearances" : [
+      "filename": "dark_16_16_1x_16.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "16x16",
+      "appearances": [
         {
-          "appearance" : "luminosity",
-          "value" : "dark"
+          "appearance": "luminosity",
+          "value": "dark"
         }
-      ],
-      "filename" : "AppIcon-Dark.png",
-      "idiom" : "mac",
-      "platform" : "macos",
-      "size" : "1024x1024"
+      ]
+    },
+    {
+      "filename": "light_16_16_2x_32.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "16x16"
+    },
+    {
+      "filename": "dark_16_16_2x_32.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "16x16",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_32_32_1x_32.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "32x32"
+    },
+    {
+      "filename": "dark_32_32_1x_32.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "32x32",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_32_32_2x_64.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "32x32"
+    },
+    {
+      "filename": "dark_32_32_2x_64.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "32x32",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_128_128_1x_128.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "128x128"
+    },
+    {
+      "filename": "dark_128_128_1x_128.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "128x128",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_128_128_2x_256.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "128x128"
+    },
+    {
+      "filename": "dark_128_128_2x_256.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "128x128",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_256_256_1x_256.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "256x256"
+    },
+    {
+      "filename": "dark_256_256_1x_256.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "256x256",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_256_256_2x_512.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "256x256"
+    },
+    {
+      "filename": "dark_256_256_2x_512.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "256x256",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_512_512_1x_512.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "512x512"
+    },
+    {
+      "filename": "dark_512_512_1x_512.png",
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "512x512",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "light_512_512_2x_1024.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "512x512"
+    },
+    {
+      "filename": "dark_512_512_2x_1024.png",
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "512x512",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }
