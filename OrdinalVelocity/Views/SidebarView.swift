@@ -1,18 +1,15 @@
 import SwiftUI
 
 struct SidebarView: View {
-    @Bindable var store: NotesFolderStore
+    let rankedNotes: [RankedNote]
     @Binding var searchText: String
     @Binding var highlightedIndex: Int
     var editorFocus: FocusState<EditorFocusTarget?>.Binding
+    var selectedNoteID: URL?
     var onMoveHighlight: (Int) -> Void
     var onOpenHighlightedIntoBody: () -> Void
     var onCreateFromSearch: () -> Void
     var onSelectIndex: (Int) -> Void
-
-    private var ranked: [RankedNote] {
-        FuzzySearch.rank(store.notes, query: searchText)
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +21,7 @@ struct SidebarView: View {
                     handleKey(keyPress)
                 }
 
-            List(Array(ranked.enumerated()), id: \.element.id) { index, rankedNote in
+            List(Array(rankedNotes.enumerated()), id: \.element.id) { index, rankedNote in
                 NoteRow(
                     note: rankedNote.note,
                     isHighlighted: index == highlightedIndex,
@@ -46,10 +43,10 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
         .onChange(of: searchText) { _, _ in
-            reconcileHighlight(keeping: store.selectedNoteID)
+            reconcileHighlight(keeping: selectedNoteID)
         }
-        .onChange(of: store.notes.count) { _, _ in
-            reconcileHighlight(keeping: store.selectedNoteID)
+        .onChange(of: rankedNotes.count) { _, _ in
+            reconcileHighlight(keeping: selectedNoteID)
         }
     }
 
@@ -84,23 +81,32 @@ struct SidebarView: View {
         return .ignored
     }
 
+    /// Keep the highlight on a navigable row when the query or note list changes.
     private func reconcileHighlight(keeping preferredID: URL?) {
-        let items = ranked
-        let navigable = FuzzySearch.navigableIndices(in: items, query: searchText)
+        let navigable = FuzzySearch.navigableIndices(in: rankedNotes, query: searchText)
         guard !navigable.isEmpty else {
             highlightedIndex = 0
             return
         }
+
+        let previousID = rankedNotes.indices.contains(highlightedIndex)
+            ? rankedNotes[highlightedIndex].note.fileURL
+            : nil
+
         if let preferredID,
-           let idx = items.firstIndex(where: { $0.note.fileURL == preferredID }),
+           let idx = rankedNotes.firstIndex(where: { $0.note.fileURL == preferredID }),
            navigable.contains(idx) {
             highlightedIndex = idx
         } else if navigable.contains(highlightedIndex) {
-            // keep
+            // Keep current highlight.
         } else {
             highlightedIndex = navigable[0]
         }
-        onSelectIndex(highlightedIndex)
+
+        let newID = rankedNotes[highlightedIndex].note.fileURL
+        if newID != previousID || newID != preferredID {
+            onSelectIndex(highlightedIndex)
+        }
     }
 }
 

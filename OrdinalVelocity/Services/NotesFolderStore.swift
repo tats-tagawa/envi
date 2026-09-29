@@ -9,12 +9,13 @@ final class NotesFolderStore {
 
     private(set) var notes: [Note] = []
     private(set) var folderURL: URL?
-    private(set) var isAccessingSecurityScope = false
     var selectedNoteID: URL?
     var errorMessage: String?
 
+    private var isAccessingSecurityScope = false
     private var watcher: DirectoryWatcher?
     private var saveTasks: [URL: Task<Void, Never>] = [:]
+    /// While set, ignore directory-watcher reloads so our own writes do not bounce back.
     private var suppressReloadUntil: Date?
     private var isReloading = false
 
@@ -81,7 +82,7 @@ final class NotesFolderStore {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             beginUsingFolder(folder)
         } catch {
-            errorMessage = "Could not create Notes folder: \(error.localizedDescription)"
+            errorMessage = "Could not create Ordinal Velocity folder: \(error.localizedDescription)"
         }
     }
 
@@ -95,7 +96,7 @@ final class NotesFolderStore {
             UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
             activateFolder(url)
         } catch {
-            // Non-sandboxed / already-accessible path (e.g. default Documents).
+            // Path is already accessible (e.g. default Documents with sandbox off).
             UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
             activateFolder(url)
         }
@@ -119,6 +120,7 @@ final class NotesFolderStore {
 
     func reloadNotes() {
         guard let folderURL, !isReloading else { return }
+        // Skip reloads right after we wrote or renamed a file (watcher echo).
         if let until = suppressReloadUntil, Date() < until { return }
 
         isReloading = true
@@ -140,7 +142,7 @@ final class NotesFolderStore {
                 let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? true
                 guard isFile else { continue }
 
-                // Don't clobber in-flight edits for the selected note.
+                // Keep in-memory text if a debounced save for this note is still pending.
                 if let selected = selectedNote,
                    selected.fileURL == url,
                    saveTasks[url] != nil {
@@ -149,15 +151,15 @@ final class NotesFolderStore {
                 }
 
                 let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-                let dates = Note.dates(for: url)
+                let timestamps = Note.fileTimestamps(for: url)
                 let title = url.deletingPathExtension().lastPathComponent
                 loaded.append(
                     Note(
                         fileURL: url,
                         title: title,
                         body: body,
-                        createdAt: dates.created,
-                        updatedAt: dates.updated
+                        createdAt: timestamps.created,
+                        updatedAt: timestamps.updated
                     )
                 )
             }
@@ -196,13 +198,13 @@ final class NotesFolderStore {
         do {
             try "".write(to: url, atomically: true, encoding: .utf8)
             suppressReloadBriefly()
-            let dates = Note.dates(for: url)
+            let timestamps = Note.fileTimestamps(for: url)
             let note = Note(
                 fileURL: url,
                 title: url.deletingPathExtension().lastPathComponent,
                 body: "",
-                createdAt: dates.created,
-                updatedAt: dates.updated
+                createdAt: timestamps.created,
+                updatedAt: timestamps.updated
             )
             notes.insert(note, at: 0)
             selectedNoteID = note.fileURL
@@ -214,8 +216,11 @@ final class NotesFolderStore {
     }
 
     func select(_ note: Note?) {
+        let newID = note?.fileURL
+        // Selecting the same note again should not flush pending saves.
+        if newID == selectedNoteID { return }
         flushPendingSaves()
-        selectedNoteID = note?.fileURL
+        selectedNoteID = newID
     }
 
     func updateBody(_ body: String, for noteID: URL) {
@@ -240,14 +245,13 @@ final class NotesFolderStore {
         do {
             suppressReloadBriefly()
             try FileManager.default.moveItem(at: current.fileURL, to: destination)
-            let dates = Note.dates(for: destination)
+            let timestamps = Note.fileTimestamps(for: destination)
             notes[index].fileURL = destination
             notes[index].title = destination.deletingPathExtension().lastPathComponent
-            notes[index].updatedAt = dates.updated
+            notes[index].updatedAt = timestamps.updated
             if selectedNoteID == noteID {
                 selectedNoteID = destination
             }
-            // Persist body under new name if needed (move keeps content).
         } catch {
             errorMessage = "Could not rename note: \(error.localizedDescription)"
         }
@@ -281,9 +285,9 @@ final class NotesFolderStore {
             suppressReloadBriefly()
             try note.body.write(to: note.fileURL, atomically: true, encoding: .utf8)
             if let index = notes.firstIndex(where: { $0.fileURL == noteID }) {
-                let dates = Note.dates(for: note.fileURL)
-                notes[index].updatedAt = dates.updated
-                notes[index].createdAt = dates.created
+                let timestamps = Note.fileTimestamps(for: note.fileURL)
+                notes[index].updatedAt = timestamps.updated
+                notes[index].createdAt = timestamps.created
             }
         } catch {
             errorMessage = "Could not save note: \(error.localizedDescription)"
@@ -291,6 +295,7 @@ final class NotesFolderStore {
     }
 
     private func suppressReloadBriefly() {
+        // Longer than DirectoryWatcher's 0.2s debounce so our write is ignored once.
         suppressReloadUntil = Date().addingTimeInterval(0.5)
     }
 

@@ -8,7 +8,8 @@ struct Note: Identifiable, Hashable, Sendable {
     var createdAt: Date
     var updatedAt: Date
 
-    static func dates(for url: URL) -> (created: Date, updated: Date) {
+    /// Created / modified times from the file on disk (not stored in the Markdown).
+    static func fileTimestamps(for url: URL) -> (created: Date, updated: Date) {
         let values = try? url.resourceValues(forKeys: [
             .creationDateKey,
             .contentModificationDateKey

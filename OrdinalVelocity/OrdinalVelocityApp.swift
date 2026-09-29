@@ -26,7 +26,3 @@ struct OrdinalVelocityApp: App {
         }
     }
 }
-
-extension Notification.Name {
-    static let focusSearch = Notification.Name("OrdinalVelocity.focusSearch")
-}

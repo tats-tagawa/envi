@@ -8,11 +8,13 @@ struct RankedNote: Identifiable, Hashable, Sendable {
 }
 
 enum FuzzySearch {
-    /// Empty query → all notes by updatedAt desc (all match).
-    /// Non-empty → matches first (by score), then non-matches (updatedAt desc). All notes stay visible.
+    /// Empty query → all notes by updatedAt desc.
+    /// Non-empty → matches first (by score), then non-matches (updatedAt desc).
+    /// All notes stay visible; non-matches are dimmed in the UI.
     static func rank(_ notes: [Note], query: String) -> [RankedNote] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            // Idle list: treat every note as a match so ↑↓ can reach all of them.
             return notes
                 .sorted { $0.updatedAt > $1.updatedAt }
                 .map { RankedNote(note: $0, matchesQuery: true, score: 0) }
@@ -24,6 +26,7 @@ enum FuzzySearch {
         for note in notes {
             let titleScore = score(query: trimmed, in: note.title)
             let bodyScore = score(query: trimmed, in: note.body)
+            // Title matches count double so filename hits rank above body-only hits.
             let best = max(titleScore.map { $0 * 2 } ?? -1, bodyScore ?? -1)
             if best >= 0 {
                 matches.append(RankedNote(note: note, matchesQuery: true, score: best))
@@ -41,7 +44,8 @@ enum FuzzySearch {
         return matches + nonMatches
     }
 
-    /// Indices into `ranked` that are navigable (matches when querying; all when idle).
+    /// Rows the user can move between with ↑↓.
+    /// While searching, only matches; with an empty query, every row.
     static func navigableIndices(in ranked: [RankedNote], query: String) -> [Int] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
@@ -50,7 +54,12 @@ enum FuzzySearch {
         return ranked.indices.filter { ranked[$0].matchesQuery }
     }
 
-    /// Higher is better. `nil` means no match.
+    /// Fuzzy subsequence score. Higher is better; `nil` means no match.
+    ///
+    /// Scoring ideas (kept simple on purpose):
+    /// - base points per matched character, plus a streak bonus for consecutive hits
+    /// - bonus for matching at the start of the string or after a word separator
+    /// - small bonus when matched characters sit close together
     static func score(query: String, in text: String) -> Int? {
         let q = Array(query.lowercased())
         let t = Array(text.lowercased())

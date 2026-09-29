@@ -1,8 +1,9 @@
 import Foundation
 
-/// Watches a directory for changes using DispatchSource (FSEvents under the hood on Darwin).
+/// Watches a directory for changes via DispatchSource and `O_EVTONLY`
+/// (kernel file-system events for that path, not the FSEvents API).
 final class DirectoryWatcher {
-    private var sources: [DispatchSourceFileSystemObject] = []
+    private var source: DispatchSourceFileSystemObject?
     private let queue = DispatchQueue(label: "com.ordinalvelocity.dirwatch", qos: .utility)
     private var debounceWork: DispatchWorkItem?
     private let onChange: () -> Void
@@ -33,14 +34,14 @@ final class DirectoryWatcher {
         }
 
         source.resume()
-        sources = [source]
+        self.source = source
     }
 
     func stop() {
         debounceWork?.cancel()
         debounceWork = nil
-        sources.forEach { $0.cancel() }
-        sources.removeAll()
+        source?.cancel()
+        source = nil
     }
 
     private func scheduleNotify() {
