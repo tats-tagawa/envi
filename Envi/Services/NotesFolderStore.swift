@@ -77,12 +77,12 @@ final class NotesFolderStore {
     func useDefaultDocumentsFolder() {
         let docs = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Documents", isDirectory: true)
-        let folder = docs.appendingPathComponent("Ordinal Velocity", isDirectory: true)
+        let folder = docs.appendingPathComponent("envi", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             beginUsingFolder(folder)
         } catch {
-            errorMessage = "Could not create Ordinal Velocity folder: \(error.localizedDescription)"
+            errorMessage = "Could not create envi folder: \(error.localizedDescription)"
         }
     }
 

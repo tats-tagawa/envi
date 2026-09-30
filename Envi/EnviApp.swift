@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OrdinalVelocityApp: App {
+struct EnviApp: App {
     @State private var store = NotesFolderStore()
 
     var body: some Scene {

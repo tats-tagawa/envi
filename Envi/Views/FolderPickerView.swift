@@ -12,14 +12,14 @@ struct FolderPickerView: View {
             Text("Choose Notes Folder")
                 .font(.title2.weight(.semibold))
 
-            Text("Ordinal Velocity stores each note as a Markdown file. Pick a folder you can also open in other apps.")
+            Text("envi stores each note as a Markdown file. Pick a folder you can also open in other apps.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
 
             HStack(spacing: 12) {
-                Button("Use Documents/Ordinal Velocity") {
+                Button("Use Documents/envi") {
                     store.useDefaultDocumentsFolder()
                 }
                 .keyboardShortcut(.defaultAction)
