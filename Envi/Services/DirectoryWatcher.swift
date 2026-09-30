@@ -4,7 +4,7 @@ import Foundation
 /// (kernel file-system events for that path, not the FSEvents API).
 final class DirectoryWatcher {
     private var source: DispatchSourceFileSystemObject?
-    private let queue = DispatchQueue(label: "com.ordinalvelocity.dirwatch", qos: .utility)
+    private let queue = DispatchQueue(label: "com.envi.dirwatch", qos: .utility)
     private var debounceWork: DispatchWorkItem?
     private let onChange: () -> Void
 
