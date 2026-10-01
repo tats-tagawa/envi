@@ -17,9 +17,9 @@
 		A10000000000000000000008 /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* NoteEditorView.swift */; };
 		A10000000000000000000009 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* StatusBarView.swift */; };
 		A1000000000000000000000A /* FolderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* FolderPickerView.swift */; };
+		A1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* Assets.xcassets */; };
 		A1000000000000000000000C /* NoteBodyTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* NoteBodyTextView.swift */; };
 		A1000000000000000000000E /* AppFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* AppFocus.swift */; };
-		A1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,12 +33,12 @@
 		A20000000000000000000008 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000A /* FolderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerView.swift; sourceTree = "<group>"; };
-		A2000000000000000000000D /* NoteBodyTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteBodyTextView.swift; sourceTree = "<group>"; };
-		A2000000000000000000000E /* AppFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFocus.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A2000000000000000000000C /* Envi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Envi.entitlements; sourceTree = "<group>"; };
+		A2000000000000000000000D /* NoteBodyTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteBodyTextView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000E /* AppFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFocus.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
-		A30000000000000000000001 /* envi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "envi.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000001 /* envi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = envi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -275,8 +275,9 @@
 				CODE_SIGN_ENTITLEMENTS = Envi/Envi.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_NAME = Envi;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = envi;
 				INFOPLIST_KEY_CFBundleName = envi;
@@ -291,7 +292,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.envi.app;
 				PRODUCT_MODULE_NAME = Envi;
 				PRODUCT_NAME = envi;
-				EXECUTABLE_NAME = Envi;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -305,8 +305,9 @@
 				CODE_SIGN_ENTITLEMENTS = Envi/Envi.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_NAME = Envi;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = envi;
 				INFOPLIST_KEY_CFBundleName = envi;
@@ -321,7 +322,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.envi.app;
 				PRODUCT_MODULE_NAME = Envi;
 				PRODUCT_NAME = envi;
-				EXECUTABLE_NAME = Envi;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
