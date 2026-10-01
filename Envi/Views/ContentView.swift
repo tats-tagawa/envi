@@ -6,10 +6,15 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var highlightedIndex = 0
     @FocusState private var editorFocus: EditorFocusTarget?
+    @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
 
     /// Ranked once here and passed into the sidebar so both stay in sync.
     private var rankedNotes: [RankedNote] {
         FuzzySearch.rank(store.notes, query: searchText)
+    }
+
+    private var resolvedLayoutMode: LayoutMode {
+        LayoutMode(rawValue: layoutMode) ?? .sidebar
     }
 
     var body: some View {
@@ -37,39 +42,63 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private var mainLayout: some View {
-        HStack(spacing: 0) {
-            SidebarView(
-                rankedNotes: rankedNotes,
-                searchText: $searchText,
-                highlightedIndex: $highlightedIndex,
-                editorFocus: $editorFocus,
-                selectedNoteID: store.selectedNoteID,
-                onMoveHighlight: moveHighlight,
-                onOpenHighlightedIntoBody: openHighlightedIntoBody,
-                onCreateFromSearch: createFromSearch,
-                onSelectIndex: selectIndex
-            )
-            .frame(width: 280)
-            .frame(maxHeight: .infinity)
+        Group {
+            switch resolvedLayoutMode {
+            case .sidebar:
+                HStack(spacing: 0) {
+                    notesPane
+                        .frame(width: 280)
+                        .frame(maxHeight: .infinity)
 
-            Divider()
+                    Divider()
 
-            VStack(spacing: 0) {
-                NoteEditorView(
-                    store: store,
-                    note: store.selectedNote,
-                    editorFocus: $editorFocus
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    editorPane
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            case .stacked:
+                VSplitView {
+                    notesPane
+                        .frame(minHeight: 160)
+                        .frame(maxWidth: .infinity)
 
-                StatusBarView(note: store.selectedNote)
+                    editorPane
+                        .frame(minHeight: 200)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             editorFocus = .search
             syncSelectionToHighlight()
+        }
+    }
+
+    private var notesPane: some View {
+        SidebarView(
+            rankedNotes: rankedNotes,
+            searchText: $searchText,
+            highlightedIndex: $highlightedIndex,
+            editorFocus: $editorFocus,
+            selectedNoteID: store.selectedNoteID,
+            onMoveHighlight: moveHighlight,
+            onOpenHighlightedIntoBody: openHighlightedIntoBody,
+            onCreateFromSearch: createFromSearch,
+            onSelectIndex: selectIndex
+        )
+    }
+
+    private var editorPane: some View {
+        VStack(spacing: 0) {
+            NoteEditorView(
+                store: store,
+                note: store.selectedNote,
+                editorFocus: $editorFocus
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            StatusBarView(note: store.selectedNote)
         }
     }
 

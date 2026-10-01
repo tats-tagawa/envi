@@ -24,5 +24,9 @@ struct EnviApp: App {
                 .keyboardShortcut("k", modifiers: .command)
             }
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
