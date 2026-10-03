@@ -16,6 +16,9 @@ struct ContentView: View {
     @State private var tagsDraft = ""
     @FocusState private var editorFocus: EditorFocusTarget?
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
+    /// Fresh key so earlier default-off installs pick up Vim without a Settings visit.
+    @AppStorage("vimBodyModeEnabled") private var vimModeEnabled = true
+    @State private var vimMode: VimMode = .insert
 
     /// Rank against the active search query. When the field is showing a selected
     /// note's title (or mid-rename), keep using `savedSearchText` so ↑↓ / ⌃J/K
@@ -154,12 +157,20 @@ struct ContentView: View {
     }
 
     private var editorPane: some View {
-        NoteEditorView(
-            store: store,
-            note: store.selectedNote,
-            editorFocus: $editorFocus
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            NoteEditorView(
+                store: store,
+                note: store.selectedNote,
+                editorFocus: $editorFocus,
+                vimEnabled: vimModeEnabled,
+                vimMode: $vimMode
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if vimModeEnabled {
+                StatusBarView(vimMode: vimMode)
+            }
+        }
     }
 
     // MARK: - Search / title field (NV model)

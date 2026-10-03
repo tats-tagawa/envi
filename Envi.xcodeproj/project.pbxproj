@@ -25,6 +25,10 @@
 		A10000000000000000000012 /* NoteMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* NoteMarkdown.swift */; };
 		A10000000000000000000013 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* GlobalHotKey.swift */; };
 		A10000000000000000000014 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* AppDelegate.swift */; };
+		A10000000000000000000015 /* VimMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* VimMode.swift */; };
+		A10000000000000000000016 /* VimBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* VimBuffer.swift */; };
+		A10000000000000000000017 /* VimEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* VimEngine.swift */; };
+		A10000000000000000000018 /* VimTextEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* VimTextEditing.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +52,10 @@
 		A20000000000000000000012 /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdown.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
 		A20000000000000000000014 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* VimMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VimMode.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* VimBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VimBuffer.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* VimEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VimEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* VimTextEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VimTextEditing.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* envi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = envi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -111,8 +119,20 @@
 				A20000000000000000000004 /* DirectoryWatcher.swift */,
 				A20000000000000000000005 /* NotesFolderStore.swift */,
 				A20000000000000000000013 /* GlobalHotKey.swift */,
+				A50000000000000000000008 /* Vim */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000008 /* Vim */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000015 /* VimMode.swift */,
+				A20000000000000000000016 /* VimBuffer.swift */,
+				A20000000000000000000017 /* VimEngine.swift */,
+				A20000000000000000000018 /* VimTextEditing.swift */,
+			);
+			path = Vim;
 			sourceTree = "<group>";
 		};
 		A50000000000000000000006 /* Views */ = {
@@ -248,6 +268,10 @@
 				A10000000000000000000012 /* NoteMarkdown.swift in Sources */,
 				A10000000000000000000013 /* GlobalHotKey.swift in Sources */,
 				A10000000000000000000014 /* AppDelegate.swift in Sources */,
+				A10000000000000000000015 /* VimMode.swift in Sources */,
+				A10000000000000000000016 /* VimBuffer.swift in Sources */,
+				A10000000000000000000017 /* VimEngine.swift in Sources */,
+				A10000000000000000000018 /* VimTextEditing.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
