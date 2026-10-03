@@ -150,14 +150,16 @@ final class NotesFolderStore {
                     continue
                 }
 
-                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let raw = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let parsed = NoteMarkdown.parse(raw)
                 let timestamps = Note.fileTimestamps(for: url)
                 let title = url.deletingPathExtension().lastPathComponent
                 loaded.append(
                     Note(
                         fileURL: url,
                         title: title,
-                        body: body,
+                        body: parsed.body,
+                        tags: parsed.tags,
                         createdAt: timestamps.created,
                         updatedAt: timestamps.updated
                     )
@@ -189,11 +191,9 @@ final class NotesFolderStore {
     // MARK: - CRUD
 
     @discardableResult
-    func createNote(title: String) -> Note? {
+    func createNote(title: String = "") -> Note? {
         guard let folderURL else { return nil }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
         let url = uniqueFileURL(forTitle: trimmed, in: folderURL)
         do {
             try "".write(to: url, atomically: true, encoding: .utf8)
@@ -203,6 +203,7 @@ final class NotesFolderStore {
                 fileURL: url,
                 title: url.deletingPathExtension().lastPathComponent,
                 body: "",
+                tags: [],
                 createdAt: timestamps.created,
                 updatedAt: timestamps.updated
             )
@@ -232,13 +233,12 @@ final class NotesFolderStore {
     func updateTitle(_ title: String, for noteID: URL) {
         guard let index = notes.firstIndex(where: { $0.fileURL == noteID }) else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
+        // Empty title is allowed; the file is stored as Untitled.md.
+        let destinationBase = trimmed.isEmpty ? "Untitled" : trimmed
         let current = notes[index]
-        if current.title == trimmed { return }
-
         guard let folderURL else { return }
-        let destination = uniqueFileURL(forTitle: trimmed, in: folderURL, excluding: current.fileURL)
+        let destination = uniqueFileURL(forTitle: destinationBase, in: folderURL, excluding: current.fileURL)
+        if destination == current.fileURL { return }
 
         flushSave(for: noteID)
 
@@ -255,6 +255,14 @@ final class NotesFolderStore {
         } catch {
             errorMessage = "Could not rename note: \(error.localizedDescription)"
         }
+    }
+
+    func updateTags(_ tags: [String], for noteID: URL) {
+        guard let index = notes.firstIndex(where: { $0.fileURL == noteID }) else { return }
+        let cleaned = NoteMarkdown.normalizeTags(tags)
+        guard notes[index].tags != cleaned else { return }
+        notes[index].tags = cleaned
+        scheduleSave(noteID: noteID)
     }
 
     private func scheduleSave(noteID: URL) {
@@ -283,7 +291,8 @@ final class NotesFolderStore {
         guard let note = notes.first(where: { $0.fileURL == noteID }) else { return }
         do {
             suppressReloadBriefly()
-            try note.body.write(to: note.fileURL, atomically: true, encoding: .utf8)
+            let raw = NoteMarkdown.serialize(tags: note.tags, body: note.body)
+            try raw.write(to: note.fileURL, atomically: true, encoding: .utf8)
             if let index = notes.firstIndex(where: { $0.fileURL == noteID }) {
                 let timestamps = Note.fileTimestamps(for: note.fileURL)
                 notes[index].updatedAt = timestamps.updated

@@ -7,7 +7,7 @@ struct NoteEditorView: View {
 
     @State private var titleText = ""
     @State private var bodyText = ""
-    /// Tracks which note the local title/body buffers belong to (avoids cross-note bleed).
+    /// Tracks which note the local buffers belong to (avoids cross-note bleed).
     @State private var editingNoteID: URL?
 
     var body: some View {
@@ -16,11 +16,11 @@ struct NoteEditorView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     TextField("Title", text: $titleText)
                         .textFieldStyle(.plain)
-                        .font(.title2.weight(.semibold))
+                        .font(.headline)
                         .focused(editorFocus, equals: .title)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                        .padding(.bottom, 8)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                        .padding(.bottom, 6)
                         .onSubmit {
                             commitTitle(for: note.fileURL)
                             focusBodyAtEnd()
@@ -29,6 +29,7 @@ struct NoteEditorView: View {
                     Divider()
 
                     NoteBodyTextView(
+                        noteID: note.fileURL,
                         text: $bodyText,
                         isFocused: editorFocus.wrappedValue == .body,
                         onBecameFirstResponder: {
@@ -37,16 +38,14 @@ struct NoteEditorView: View {
                             }
                         },
                         onTextChange: { newValue in
-                            // Ignore updates that arrive after we already switched notes.
                             guard editingNoteID == note.fileURL else { return }
                             store.updateBody(newValue, for: note.fileURL)
                         }
                     )
-                    .padding(.horizontal, 8)
+                    .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .onChange(of: editorFocus.wrappedValue) { oldValue, newValue in
-                    // Rename when leaving the title field (e.g. click into the body).
                     if oldValue == .title, newValue != .title {
                         commitTitle(for: note.fileURL)
                     }
@@ -106,9 +105,7 @@ struct NoteEditorView: View {
 
     private func commitTitle(for noteID: URL) {
         let trimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
         store.updateTitle(trimmed, for: noteID)
-        // After a rename the file URL changes; keep local state aligned.
         if let selected = store.selectedNote {
             editingNoteID = selected.fileURL
             titleText = selected.title
