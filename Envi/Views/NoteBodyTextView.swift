@@ -16,6 +16,9 @@ final class FocusAwareTextView: NSTextView {
 
 /// Multiline note body. Uses NSTextView so we can place the caret at the end on demand.
 struct NoteBodyTextView: NSViewRepresentable {
+    /// Identifies which note the text belongs to so we can sync on note switches
+    /// even while the text view remains first responder.
+    var noteID: URL?
     @Binding var text: String
     var isFocused: Bool
     var onBecameFirstResponder: () -> Void
@@ -57,6 +60,7 @@ struct NoteBodyTextView: NSViewRepresentable {
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
+        context.coordinator.noteID = noteID
 
         NotificationCenter.default.addObserver(
             context.coordinator,
@@ -75,13 +79,28 @@ struct NoteBodyTextView: NSViewRepresentable {
             coordinator?.parent.onBecameFirstResponder()
         }
 
+        let noteChanged = context.coordinator.noteID != noteID
+        context.coordinator.noteID = noteID
+
         if textView.string != text {
-            let selected = textView.selectedRange()
-            textView.string = text
-            let max = (text as NSString).length
-            let location = min(selected.location, max)
-            let length = min(selected.length, max - location)
-            textView.setSelectedRange(NSRange(location: location, length: length))
+            // While typing, NSTextView is source of truth. A store-driven re-render can
+            // arrive with a stale SwiftUI binding (still "") before @State catches up;
+            // applying that would clamp the caret to 0 — noticeable on a brand-new note.
+            let isEditing = textView.window?.firstResponder === textView
+            if noteChanged || !isEditing {
+                let selected = textView.selectedRange()
+                textView.string = text
+                if noteChanged {
+                    // Selection from the previous note is meaningless.
+                    let end = (text as NSString).length
+                    textView.setSelectedRange(NSRange(location: end, length: 0))
+                } else {
+                    let max = (text as NSString).length
+                    let location = min(selected.location, max)
+                    let length = min(selected.length, max - location)
+                    textView.setSelectedRange(NSRange(location: location, length: length))
+                }
+            }
         }
 
         if isFocused, textView.window?.firstResponder !== textView {
@@ -97,10 +116,12 @@ struct NoteBodyTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NoteBodyTextView
+        var noteID: URL?
         weak var textView: FocusAwareTextView?
 
         init(_ parent: NoteBodyTextView) {
             self.parent = parent
+            self.noteID = parent.noteID
         }
 
         func textDidChange(_ notification: Notification) {

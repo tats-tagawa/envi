@@ -5,6 +5,10 @@ struct RankedNote: Identifiable, Hashable, Sendable {
     var note: Note
     var matchesQuery: Bool
     var score: Int
+
+    var tagsDisplay: String {
+        note.tags.joined(separator: ", ")
+    }
 }
 
 enum FuzzySearch {
@@ -24,10 +28,20 @@ enum FuzzySearch {
         var nonMatches: [RankedNote] = []
 
         for note in notes {
-            let titleScore = score(query: trimmed, in: note.title)
+            let titleScore = score(query: trimmed, in: note.title).map {
+                titleBoost(query: trimmed, title: note.title, base: $0)
+            }
+            let previewScore = score(query: trimmed, in: note.previewLine)
             let bodyScore = score(query: trimmed, in: note.body)
-            // Title matches count double so filename hits rank above body-only hits.
-            let best = max(titleScore.map { $0 * 2 } ?? -1, bodyScore ?? -1)
+            let tagScore = note.tags.compactMap { score(query: trimmed, in: $0) }.max()
+            // Title hits (esp. exact / prefix) outrank body-only; tags & preview mid-tier.
+            let best = [
+                titleScore,
+                previewScore.map { $0 * 2 },
+                tagScore.map { $0 * 2 },
+                bodyScore
+            ].compactMap { $0 }.max() ?? -1
+
             if best >= 0 {
                 matches.append(RankedNote(note: note, matchesQuery: true, score: best))
             } else {
@@ -37,6 +51,10 @@ enum FuzzySearch {
 
         matches.sort { lhs, rhs in
             if lhs.score != rhs.score { return lhs.score > rhs.score }
+            // Prefer shorter titles when scores tie ("test" before "testing").
+            if lhs.note.title.count != rhs.note.title.count {
+                return lhs.note.title.count < rhs.note.title.count
+            }
             return lhs.note.updatedAt > rhs.note.updatedAt
         }
         nonMatches.sort { $0.note.updatedAt > $1.note.updatedAt }
@@ -82,7 +100,7 @@ enum FuzzySearch {
                 }
                 if ti > 0 {
                     let prev = t[ti - 1]
-                    if prev == " " || prev == "-" || prev == "_" || prev == "/" {
+                    if prev == " " || prev == "-" || prev == "_" || prev == "/" || prev == "#" {
                         score += 12
                     }
                 }
@@ -98,8 +116,22 @@ enum FuzzySearch {
         if let last = lastMatchIndex {
             let span = last + 1
             score += max(0, 40 - (span - q.count))
+            // Prefer tighter covers of shorter strings (query "test" → "test" > "testing").
+            score -= max(0, t.count - q.count) * 3
         }
 
         return score
+    }
+
+    /// Extra weight so an exact or prefix title match beats longer fuzzy title hits.
+    private static func titleBoost(query: String, title: String, base: Int) -> Int {
+        let q = query.lowercased()
+        let t = title.lowercased()
+        if t == q { return base + 50_000 }
+        if t.hasPrefix(q) { return base + 25_000 }
+        if t.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { String($0) == q }) {
+            return base + 15_000
+        }
+        return base * 2
     }
 }

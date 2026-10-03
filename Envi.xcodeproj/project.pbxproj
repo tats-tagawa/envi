@@ -22,6 +22,9 @@
 		A1000000000000000000000E /* AppFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* AppFocus.swift */; };
 		A10000000000000000000010 /* LayoutMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* LayoutMode.swift */; };
 		A10000000000000000000011 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* SettingsView.swift */; };
+		A10000000000000000000012 /* NoteMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* NoteMarkdown.swift */; };
+		A10000000000000000000013 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* GlobalHotKey.swift */; };
+		A10000000000000000000014 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +45,9 @@
 		A2000000000000000000000F /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		A20000000000000000000010 /* LayoutMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutMode.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdown.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* envi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = envi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -68,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000001 /* EnviApp.swift */,
+				A20000000000000000000014 /* AppDelegate.swift */,
 				A2000000000000000000000E /* AppFocus.swift */,
 				A50000000000000000000004 /* Models */,
 				A50000000000000000000005 /* Services */,
@@ -91,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000002 /* Note.swift */,
+				A20000000000000000000012 /* NoteMarkdown.swift */,
 				A20000000000000000000010 /* LayoutMode.swift */,
 			);
 			path = Models;
@@ -102,6 +110,7 @@
 				A20000000000000000000003 /* FuzzySearch.swift */,
 				A20000000000000000000004 /* DirectoryWatcher.swift */,
 				A20000000000000000000005 /* NotesFolderStore.swift */,
+				A20000000000000000000013 /* GlobalHotKey.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -236,6 +245,9 @@
 				A1000000000000000000000E /* AppFocus.swift in Sources */,
 				A10000000000000000000010 /* LayoutMode.swift in Sources */,
 				A10000000000000000000011 /* SettingsView.swift in Sources */,
+				A10000000000000000000012 /* NoteMarkdown.swift in Sources */,
+				A10000000000000000000013 /* GlobalHotKey.swift in Sources */,
+				A10000000000000000000014 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
