@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
+    @AppStorage("vimBodyModeEnabled") private var vimModeEnabled = true
     @AppStorage(HotKeyDefaults.enabledKey) private var hotKeyEnabled = false
     @AppStorage(HotKeyDefaults.keyCodeKey) private var hotKeyCode = Int(HotKeyDefaults.defaultKeyCode)
     @AppStorage(HotKeyDefaults.modifiersKey) private var hotKeyModifiers = Int(HotKeyDefaults.defaultModifiers)
@@ -25,6 +26,10 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.radioGroup)
+            }
+
+            Section("Editing") {
+                Toggle("Vim mode (note body)", isOn: $vimModeEnabled)
             }
 
             Section("Activation") {

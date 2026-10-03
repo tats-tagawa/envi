@@ -1,6 +1,8 @@
 # envi
 
-Native macOS note-taking app inspired by Notational Velocity.
+Inspired by Notational Velocity with a hint of vi.
+
+Native macOS note-taking: fast search-first notes as plain `.md` files, with optional Vim modal editing in the note body.
 
 ## Requirements
 
@@ -22,5 +24,16 @@ open ~/Library/Developer/Xcode/DerivedData/Envi-*/Build/Products/Debug/envi.app
 2. Type in the search field to filter notes (title, body, and tags). Selecting a note puts its title in the search field (⌘D restores the previous search).
 3. **Return** opens the highlighted match or creates a note when nothing matches (the new title stays in the search field). **Escape** clears the search.
 4. **⌘L** focuses search · **⌘J/⌘K**, **⌃J/⌃K**, **⌃N/⌃P**, and **↑/↓** move the highlight · **⌘R** or double-click a title to rename · **⌘⇧T** or double-click Tags to edit tags.
-5. The notes list shows **Title**, **Date Modified**, and **Tags**. The note pane has a compact editable title and the body (no status bar). Tags appear only in the list.
+5. The notes list shows **Title**, **Date Modified**, and **Tags**. The note pane has a compact editable title and the body. Tags appear only in the list.
 6. Optional global bring-to-front hotkey: **Settings → Activation**.
+
+### Vim mode
+
+Vim modal editing for the note body is **on by default** (toggle in **Settings → Editing**). When enabled, a compact footer shows the current mode.
+
+- Opening a note into the body starts in **Insert** (`-- INSERT --`).
+- **Esc** enters **Normal** (`-- NORMAL --`, block-style caret); another **Esc** focuses search.
+- Motions: `h j k l`, `w b e`, `0` `^` `$`, `gg` `G`, counts (`3j`).
+- Insert: `i` `a` `I` `A` `o` `O`.
+- Edits: `x` `X`, `d`/`c`/`y` + motion, `dd` `cc` `yy`, `D` `C`, `p` `P`, `u` / `Ctrl-r`.
+- Visual: `v` / `V`, then motion and `d`/`c`/`y`/`x`.

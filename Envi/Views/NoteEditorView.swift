@@ -4,6 +4,8 @@ struct NoteEditorView: View {
     @Bindable var store: NotesFolderStore
     let note: Note?
     var editorFocus: FocusState<EditorFocusTarget?>.Binding
+    var vimEnabled: Bool
+    @Binding var vimMode: VimMode
 
     @State private var titleText = ""
     @State private var bodyText = ""
@@ -32,6 +34,8 @@ struct NoteEditorView: View {
                         noteID: note.fileURL,
                         text: $bodyText,
                         isFocused: editorFocus.wrappedValue == .body,
+                        vimEnabled: vimEnabled,
+                        vimMode: $vimMode,
                         onBecameFirstResponder: {
                             if editorFocus.wrappedValue != .body {
                                 editorFocus.wrappedValue = .body
