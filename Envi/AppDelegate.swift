@@ -1,11 +1,13 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var defaultsObserver: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             self.syncHotKeyFromDefaults()
         }
-        NotificationCenter.default.addObserver(
+        defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
             queue: .main
@@ -15,6 +17,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         AppDelegate.shared = self
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NotificationCenter.default.post(name: .flushPendingNotes, object: nil)
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        NotificationCenter.default.post(name: .flushPendingNotes, object: nil)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -30,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let enabled = defaults.bool(forKey: HotKeyDefaults.enabledKey)
         guard enabled else {
             GlobalHotKey.shared.unregister()
+            defaults.set(false, forKey: HotKeyDefaults.lastRegisterFailedKey)
             return
         }
 
@@ -41,10 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defaults.object(forKey: HotKeyDefaults.modifiersKey) as? Int
                 ?? Int(HotKeyDefaults.defaultModifiers)
         )
-        GlobalHotKey.shared.register(keyCode: keyCode, carbonModifiers: modifiers) {
-            NotificationCenter.default.post(name: .toggleMainWindow, object: nil)
+        let ok = GlobalHotKey.shared.register(keyCode: keyCode, carbonModifiers: modifiers) {
             AppDelegate.toggleMainWindow()
         }
+        defaults.set(!ok, forKey: HotKeyDefaults.lastRegisterFailedKey)
     }
 
     @MainActor

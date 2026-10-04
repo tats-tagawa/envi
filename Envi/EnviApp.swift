@@ -39,6 +39,11 @@ struct EnviApp: App {
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
+                Button("Delete Note") {
+                    NotificationCenter.default.post(name: .deleteSelectedNote, object: nil)
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+
                 Divider()
 
                 Button("Next Note") {

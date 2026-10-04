@@ -18,7 +18,9 @@ final class GlobalHotKey {
     /// - Parameters:
     ///   - keyCode: Hardware key code (e.g. `kVK_ANSI_N`).
     ///   - carbonModifiers: Carbon modifier mask (`cmdKey`, `optionKey`, …).
-    func register(keyCode: UInt32, carbonModifiers: UInt32, onPressed: @escaping () -> Void) {
+    /// - Returns: `true` when the system accepted the hotkey.
+    @discardableResult
+    func register(keyCode: UInt32, carbonModifiers: UInt32, onPressed: @escaping () -> Void) -> Bool {
         unregister()
         self.onPressed = onPressed
         installHandlerIfNeeded()
@@ -35,9 +37,10 @@ final class GlobalHotKey {
         )
         if status == noErr {
             hotKeyRef = ref
-        } else {
-            hotKeyRef = nil
+            return true
         }
+        hotKeyRef = nil
+        return false
     }
 
     func unregister() {
@@ -90,6 +93,7 @@ enum HotKeyDefaults {
     static let keyCodeKey = "globalHotKeyKeyCode"
     static let modifiersKey = "globalHotKeyModifiers"
     static let enabledKey = "globalHotKeyEnabled"
+    static let lastRegisterFailedKey = "globalHotKeyRegisterFailed"
 
     /// Default: ⌃⌥⌘Space
     static let defaultKeyCode = UInt32(kVK_Space)

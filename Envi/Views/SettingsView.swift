@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(HotKeyDefaults.enabledKey) private var hotKeyEnabled = false
     @AppStorage(HotKeyDefaults.keyCodeKey) private var hotKeyCode = Int(HotKeyDefaults.defaultKeyCode)
     @AppStorage(HotKeyDefaults.modifiersKey) private var hotKeyModifiers = Int(HotKeyDefaults.defaultModifiers)
+    @AppStorage(HotKeyDefaults.lastRegisterFailedKey) private var hotKeyRegisterFailed = false
     @State private var isRecordingHotKey = false
 
     private var hotKeyDisplay: String {
@@ -75,6 +76,12 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(!hotKeyEnabled)
+
+                if hotKeyEnabled, hotKeyRegisterFailed {
+                    Text("Could not register this shortcut. It may conflict with another app — try a different combination.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
 
                 Text("While enabled, closing the window hides envi instead of quitting, so the hotkey can bring it back.")
                     .font(.caption)

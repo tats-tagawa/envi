@@ -20,14 +20,17 @@ extension Notification.Name {
     /// ⌘⇧T — edit tags for the selected note.
     static let editTags = Notification.Name("Envi.editTags")
 
+    /// ⌫ / Delete — move the selected note to the Trash.
+    static let deleteSelectedNote = Notification.Name("Envi.deleteSelectedNote")
+
     /// ⌘J / ⌘K — move highlight in the notes list.
     static let moveNoteHighlight = Notification.Name("Envi.moveNoteHighlight")
 
     /// Asks the body text view to become first responder and put the caret at the end.
     static let focusNoteBodyAtEnd = Notification.Name("Envi.focusNoteBodyAtEnd")
 
-    /// Global hotkey toggled the main window.
-    static let toggleMainWindow = Notification.Name("Envi.toggleMainWindow")
+    /// Flush debounced note saves (quit / resign active).
+    static let flushPendingNotes = Notification.Name("Envi.flushPendingNotes")
 }
 
 enum NoteHighlightDelta {

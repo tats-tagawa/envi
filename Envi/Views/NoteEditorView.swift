@@ -6,6 +6,7 @@ struct NoteEditorView: View {
     var editorFocus: FocusState<EditorFocusTarget?>.Binding
     var vimEnabled: Bool
     @Binding var vimMode: VimMode
+    var onRenameOutcome: (NoteRenameOutcome) -> Void = { _ in }
 
     @State private var titleText = ""
     @State private var bodyText = ""
@@ -109,7 +110,8 @@ struct NoteEditorView: View {
 
     private func commitTitle(for noteID: URL) {
         let trimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.updateTitle(trimmed, for: noteID)
+        let outcome = store.updateTitle(trimmed, for: noteID)
+        onRenameOutcome(outcome)
         if let selected = store.selectedNote {
             editingNoteID = selected.fileURL
             titleText = selected.title
