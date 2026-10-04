@@ -5,6 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
     @AppStorage("vimBodyModeEnabled") private var vimModeEnabled = true
+    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.yearMonthDay.rawValue
+    @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
     @AppStorage(HotKeyDefaults.enabledKey) private var hotKeyEnabled = false
     @AppStorage(HotKeyDefaults.keyCodeKey) private var hotKeyCode = Int(HotKeyDefaults.defaultKeyCode)
     @AppStorage(HotKeyDefaults.modifiersKey) private var hotKeyModifiers = Int(HotKeyDefaults.defaultModifiers)
@@ -30,6 +32,21 @@ struct SettingsView: View {
 
             Section("Editing") {
                 Toggle("Vim mode (note body)", isOn: $vimModeEnabled)
+            }
+
+            Section("Date Modified") {
+                Picker("Date order", selection: $dateOrder) {
+                    ForEach(ModifiedDateOrder.allCases) { order in
+                        Text(order.title).tag(order.rawValue)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+
+                Toggle("24-hour time", isOn: $use24Hour)
+
+                Text("Recent notes show relative time (within 6 hours), or Today / Yesterday with the time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Activation") {

@@ -22,11 +22,17 @@ struct SidebarView: View {
 
     /// Which column the last click landed in — used so row double-click can rename vs edit tags.
     @State private var lastClickedColumn: ListColumn = .title
+    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.yearMonthDay.rawValue
+    @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
 
     private enum ListColumn {
         case title
         case tags
         case other
+    }
+
+    private var resolvedDateOrder: ModifiedDateOrder {
+        ModifiedDateOrder(rawValue: dateOrder) ?? .yearMonthDay
     }
 
     private var tableSelection: Binding<Set<RankedNote.ID>> {
@@ -72,7 +78,13 @@ struct SidebarView: View {
                 .width(min: 120, ideal: 180)
 
                 TableColumn("Date Modified", value: \.note.updatedAt) { ranked in
-                    Text(ranked.note.updatedAt, format: .dateTime.month(.abbreviated).day().year())
+                    Text(
+                        ModifiedDateFormat.string(
+                            for: ranked.note.updatedAt,
+                            order: resolvedDateOrder,
+                            use24Hour: use24Hour
+                        )
+                    )
                         .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -81,7 +93,7 @@ struct SidebarView: View {
                             lastClickedColumn = .other
                         })
                 }
-                .width(min: 90, ideal: 110)
+                .width(min: 120, ideal: 160)
 
                 TableColumn("Tags", value: \.tagsDisplay) { ranked in
                     Text(ranked.tagsDisplay.isEmpty ? " " : ranked.tagsDisplay)
