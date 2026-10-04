@@ -2,6 +2,13 @@ import AppKit
 import Foundation
 import Observation
 
+enum NoteRenameOutcome: Equatable {
+    case unchanged
+    case renamed
+    /// Requested title was taken; file was saved under `actualTitle` instead.
+    case collided(actualTitle: String)
+}
+
 @Observable
 @MainActor
 final class NotesFolderStore {
@@ -18,6 +25,9 @@ final class NotesFolderStore {
     /// While set, ignore directory-watcher reloads so our own writes do not bounce back.
     private var suppressReloadUntil: Date?
     private var isReloading = false
+    /// Set when a reload was skipped (suppress window or nested call); retry soon.
+    private var reloadNeeded = false
+    private var deferredReloadTask: Task<Void, Never>?
 
     var selectedNote: Note? {
         guard let selectedNoteID else { return nil }
@@ -27,6 +37,15 @@ final class NotesFolderStore {
     var hasFolder: Bool { folderURL != nil }
 
     init() {
+        NotificationCenter.default.addObserver(
+            forName: .flushPendingNotes,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.flushPendingSaves()
+            }
+        }
         restoreBookmark()
     }
 
@@ -119,12 +138,23 @@ final class NotesFolderStore {
     // MARK: - Load / watch
 
     func reloadNotes() {
-        guard let folderURL, !isReloading else { return }
-        // Skip reloads right after we wrote or renamed a file (watcher echo).
-        if let until = suppressReloadUntil, Date() < until { return }
+        guard let folderURL else { return }
+
+        // Skip reloads right after we wrote or renamed a file (watcher echo),
+        // but remember to run once the suppress window ends.
+        if let until = suppressReloadUntil, Date() < until {
+            reloadNeeded = true
+            scheduleDeferredReload(after: until)
+            return
+        }
+
+        if isReloading {
+            reloadNeeded = true
+            return
+        }
 
         isReloading = true
-        defer { isReloading = false }
+        reloadNeeded = false
 
         do {
             let urls = try FileManager.default.contentsOfDirectory(
@@ -143,10 +173,9 @@ final class NotesFolderStore {
                 guard isFile else { continue }
 
                 // Keep in-memory text if a debounced save for this note is still pending.
-                if let selected = selectedNote,
-                   selected.fileURL == url,
+                if let pending = notes.first(where: { $0.fileURL == url }),
                    saveTasks[url] != nil {
-                    loaded.append(selected)
+                    loaded.append(pending)
                     continue
                 }
 
@@ -175,6 +204,24 @@ final class NotesFolderStore {
             errorMessage = nil
         } catch {
             errorMessage = "Failed to read notes: \(error.localizedDescription)"
+        }
+
+        isReloading = false
+        if reloadNeeded {
+            reloadNeeded = false
+            reloadNotes()
+        }
+    }
+
+    private func scheduleDeferredReload(after date: Date) {
+        deferredReloadTask?.cancel()
+        let delay = max(date.timeIntervalSinceNow, 0.05)
+        deferredReloadTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            if reloadNeeded {
+                reloadNotes()
+            }
         }
     }
 
@@ -230,15 +277,18 @@ final class NotesFolderStore {
         scheduleSave(noteID: noteID)
     }
 
-    func updateTitle(_ title: String, for noteID: URL) {
-        guard let index = notes.firstIndex(where: { $0.fileURL == noteID }) else { return }
+    @discardableResult
+    func updateTitle(_ title: String, for noteID: URL) -> NoteRenameOutcome {
+        guard let index = notes.firstIndex(where: { $0.fileURL == noteID }) else { return .unchanged }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         // Empty title is allowed; the file is stored as Untitled.md.
         let destinationBase = trimmed.isEmpty ? "Untitled" : trimmed
         let current = notes[index]
-        guard let folderURL else { return }
+        guard let folderURL else { return .unchanged }
+
+        let ideal = folderURL.appendingPathComponent("\(sanitizeFilename(destinationBase)).md")
         let destination = uniqueFileURL(forTitle: destinationBase, in: folderURL, excluding: current.fileURL)
-        if destination == current.fileURL { return }
+        if destination == current.fileURL { return .unchanged }
 
         flushSave(for: noteID)
 
@@ -252,8 +302,14 @@ final class NotesFolderStore {
             if selectedNoteID == noteID {
                 selectedNoteID = destination
             }
+            let actualTitle = notes[index].title
+            if ideal != destination {
+                return .collided(actualTitle: actualTitle)
+            }
+            return .renamed
         } catch {
             errorMessage = "Could not rename note: \(error.localizedDescription)"
+            return .unchanged
         }
     }
 
@@ -265,6 +321,33 @@ final class NotesFolderStore {
         scheduleSave(noteID: noteID)
     }
 
+    /// Moves the note file to the Trash and removes it from the list.
+    func deleteNote(_ noteID: URL) {
+        guard let index = notes.firstIndex(where: { $0.fileURL == noteID }) else { return }
+        let url = notes[index].fileURL
+        flushSave(for: noteID)
+        saveTasks[noteID]?.cancel()
+        saveTasks[noteID] = nil
+
+        do {
+            suppressReloadBriefly()
+            var trashed: NSURL?
+            try FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
+            notes.remove(at: index)
+            if selectedNoteID == noteID {
+                selectedNoteID = nil
+            }
+        } catch {
+            errorMessage = "Could not delete note: \(error.localizedDescription)"
+        }
+    }
+
+    func flushPendingSaves() {
+        for id in Array(saveTasks.keys) {
+            flushSave(for: id)
+        }
+    }
+
     private func scheduleSave(noteID: URL) {
         saveTasks[noteID]?.cancel()
         saveTasks[noteID] = Task { @MainActor in
@@ -272,12 +355,6 @@ final class NotesFolderStore {
             guard !Task.isCancelled else { return }
             persistBody(for: noteID)
             saveTasks[noteID] = nil
-        }
-    }
-
-    private func flushPendingSaves() {
-        for id in saveTasks.keys {
-            flushSave(for: id)
         }
     }
 
@@ -304,7 +381,7 @@ final class NotesFolderStore {
     }
 
     private func suppressReloadBriefly() {
-        // Longer than DirectoryWatcher's 0.2s debounce so our write is ignored once.
+        // Longer than DirectoryWatcher's debounce so our write is ignored once.
         suppressReloadUntil = Date().addingTimeInterval(0.5)
     }
 

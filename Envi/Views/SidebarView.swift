@@ -19,6 +19,7 @@ struct SidebarView: View {
     var onClearSearch: () -> Void
     var onBeginRename: (Int) -> Void
     var onBeginEditTags: (Int) -> Void
+    var onBeginDelete: (Int) -> Void
 
     /// Which column the last click landed in — used so row double-click can rename vs edit tags.
     @State private var lastClickedColumn: ListColumn = .title
@@ -113,6 +114,8 @@ struct SidebarView: View {
                    let index = displayedNotes.firstIndex(where: { $0.id == id }) {
                     Button("Rename") { onBeginRename(index) }
                     Button("Edit Tags…") { onBeginEditTags(index) }
+                    Divider()
+                    Button("Move to Trash", role: .destructive) { onBeginDelete(index) }
                 }
             } primaryAction: { ids in
                 guard let id = ids.first,

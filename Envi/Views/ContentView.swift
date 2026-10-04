@@ -1,12 +1,21 @@
 import AppKit
 import SwiftUI
 
+/// How the search field relates to the selected note (NV model).
+private enum SearchFieldMode: Equatable {
+    /// User is typing a filter query.
+    case querying
+    /// Field shows the selected note's title (not editing the filename).
+    case showingTitle
+    /// Field is being used to rename the selected note.
+    case renaming
+}
+
 struct ContentView: View {
     @Bindable var store: NotesFolderStore
     @State private var searchText = ""
     @State private var savedSearchText = ""
-    @State private var isShowingSelectedTitle = false
-    @State private var isRenaming = false
+    @State private var searchMode: SearchFieldMode = .querying
     @State private var isSettingSearchProgrammatically = false
     @State private var highlightedIndex = 0
     @State private var sortOrder: [KeyPathComparator<RankedNote>] = [
@@ -14,6 +23,8 @@ struct ContentView: View {
     ]
     @State private var isEditingTags = false
     @State private var tagsDraft = ""
+    @State private var notePendingDeletion: Note?
+    @State private var renameCollisionMessage: String?
     @FocusState private var editorFocus: EditorFocusTarget?
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
     /// Fresh key so earlier default-off installs pick up Vim without a Settings visit.
@@ -21,13 +32,15 @@ struct ContentView: View {
     @State private var vimMode: VimMode = .insert
 
     /// Rank against the active search query. When the field is showing a selected
-    /// note's title (or mid-rename), keep using `savedSearchText` so ↑↓ / ⌃J/K
+    /// note's title (or mid-rename), keep using `savedSearchText` so ↑↓ / ⌘J/K
     /// does not reshuffle the list.
     private var rankingQuery: String {
-        if isShowingSelectedTitle || isRenaming {
+        switch searchMode {
+        case .showingTitle, .renaming:
             return savedSearchText
+        case .querying:
+            return searchText
         }
-        return searchText
     }
 
     private var rankedNotes: [RankedNote] {
@@ -67,8 +80,39 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .alert(
+            "Delete Note?",
+            isPresented: Binding(
+                get: { notePendingDeletion != nil },
+                set: { if !$0 { notePendingDeletion = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) { notePendingDeletion = nil }
+            Button("Move to Trash", role: .destructive) {
+                if let note = notePendingDeletion {
+                    store.deleteNote(note.fileURL)
+                    if searchMode != .querying {
+                        searchMode = .querying
+                        setSearchProgrammatically(savedSearchText)
+                    }
+                }
+                notePendingDeletion = nil
+            }
+        } message: {
+            Text("“\(notePendingDeletion?.title ?? "")” will be moved to the Trash.")
+        }
+        .alert(
+            "Title Already Used",
+            isPresented: Binding(
+                get: { renameCollisionMessage != nil },
+                set: { if !$0 { renameCollisionMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { renameCollisionMessage = nil }
+        } message: {
+            Text(renameCollisionMessage ?? "")
+        }
         .background(WindowCloseGuard())
-        .background(ControlNoteNavigationMonitor())
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             focusSearch(selectAll: true)
         }
@@ -81,8 +125,11 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .editTags)) { _ in
             beginEditTagsSelected()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .deleteSelectedNote)) { _ in
+            beginDeleteSelected()
+        }
         .onChange(of: store.selectedNote?.title) { _, newTitle in
-            if isShowingSelectedTitle, !isRenaming, let newTitle, searchText != newTitle {
+            if searchMode == .showingTitle, let newTitle, searchText != newTitle {
                 setSearchProgrammatically(newTitle)
             }
         }
@@ -152,7 +199,8 @@ struct ContentView: View {
             onSearchEdited: handleSearchEdited,
             onClearSearch: clearSearch,
             onBeginRename: beginRename(at:),
-            onBeginEditTags: beginEditTags(at:)
+            onBeginEditTags: beginEditTags(at:),
+            onBeginDelete: beginDelete(at:)
         )
     }
 
@@ -163,7 +211,8 @@ struct ContentView: View {
                 note: store.selectedNote,
                 editorFocus: $editorFocus,
                 vimEnabled: vimModeEnabled,
-                vimMode: $vimMode
+                vimMode: $vimMode,
+                onRenameOutcome: handleRenameOutcome
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -177,12 +226,12 @@ struct ContentView: View {
 
     private func handleSearchEdited() {
         guard !isSettingSearchProgrammatically else { return }
-        if isShowingSelectedTitle, !isRenaming {
+        if searchMode == .showingTitle {
             if let selected = store.selectedNote, searchText == selected.title {
                 return
             }
             // User started a new search from a selected title.
-            isShowingSelectedTitle = false
+            searchMode = .querying
         }
     }
 
@@ -195,26 +244,23 @@ struct ContentView: View {
     }
 
     private func adoptSearchTitle(from note: Note) {
-        if !isShowingSelectedTitle {
+        if searchMode == .querying {
             savedSearchText = searchText
         }
-        isShowingSelectedTitle = true
-        isRenaming = false
+        searchMode = .showingTitle
         if searchText != note.title {
             setSearchProgrammatically(note.title)
         }
     }
 
     private func clearSearch() {
-        isRenaming = false
-        isShowingSelectedTitle = false
+        searchMode = .querying
         setSearchProgrammatically("")
         focusSearch(selectAll: false)
     }
 
     private func deselectRestoreSearch() {
-        isRenaming = false
-        isShowingSelectedTitle = false
+        searchMode = .querying
         store.select(nil)
         setSearchProgrammatically(savedSearchText)
         focusSearch(selectAll: true)
@@ -230,8 +276,7 @@ struct ContentView: View {
     private func beginRename(at index: Int) {
         selectIndex(index)
         guard let note = store.selectedNote else { return }
-        isRenaming = true
-        isShowingSelectedTitle = true
+        searchMode = .renaming
         setSearchProgrammatically(note.title)
         focusSearch(selectAll: true)
     }
@@ -250,6 +295,16 @@ struct ContentView: View {
         isEditingTags = true
     }
 
+    private func beginDeleteSelected() {
+        guard let note = store.selectedNote else { return }
+        notePendingDeletion = note
+    }
+
+    private func beginDelete(at index: Int) {
+        guard displayedNotes.indices.contains(index) else { return }
+        notePendingDeletion = displayedNotes[index].note
+    }
+
     private func commitTagsDraft() {
         guard let note = store.selectedNote else { return }
         let tags = tagsDraft
@@ -259,15 +314,24 @@ struct ContentView: View {
     }
 
     private func commitRenameIfNeeded() -> Bool {
-        guard isRenaming, let note = store.selectedNote else { return false }
+        guard searchMode == .renaming, let note = store.selectedNote else { return false }
         let title = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.updateTitle(title, for: note.fileURL)
-        isRenaming = false
+        let outcome = store.updateTitle(title, for: note.fileURL)
+        handleRenameOutcome(outcome)
         if let selected = store.selectedNote {
             adoptSearchTitle(from: selected)
+        } else {
+            searchMode = .querying
         }
         focusBodyAtEnd()
         return true
+    }
+
+    private func handleRenameOutcome(_ outcome: NoteRenameOutcome) {
+        if case .collided(let actualTitle) = outcome {
+            renameCollisionMessage =
+                "That name was already taken. The note was saved as “\(actualTitle)”."
+        }
     }
 
     private func focusSearch(selectAll: Bool) {
@@ -306,7 +370,7 @@ struct ContentView: View {
         highlightedIndex = index
         let note = displayedNotes[index].note
         store.select(note)
-        if isShowingSelectedTitle {
+        if searchMode == .showingTitle {
             adoptSearchTitle(from: note)
         }
     }
@@ -317,7 +381,7 @@ struct ContentView: View {
 
         let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         // While showing a selected title with an empty ranking query, Return edits the body.
-        if isShowingSelectedTitle, store.selectedNote != nil {
+        if searchMode == .showingTitle, store.selectedNote != nil {
             focusBodyAtEnd()
             return
         }
@@ -343,8 +407,7 @@ struct ContentView: View {
         guard let note = store.createNote(title: title) else { return }
         // NV keeps the new title in the search/title field.
         savedSearchText = ""
-        isShowingSelectedTitle = true
-        isRenaming = false
+        searchMode = .showingTitle
         setSearchProgrammatically(note.title)
         if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
             highlightedIndex = idx
@@ -364,7 +427,8 @@ struct ContentView: View {
         let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         guard let first = navigable.first else { return }
         if store.selectedNoteID == nil {
-            selectIndex(first)
+            // Keep an empty selection on launch; only sync highlight index.
+            highlightedIndex = first
         } else if let selected = store.selectedNote {
             adoptSearchTitle(from: selected)
             if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == selected.fileURL }) {
@@ -409,81 +473,68 @@ private struct TagEditorSheet: View {
     }
 }
 
-/// ⌃J/⌃K and ⌃N/⌃P move the note highlight even when focus is in the body.
-private struct ControlNoteNavigationMonitor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        context.coordinator.start()
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.stop()
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        private var monitor: Any?
-
-        func start() {
-            guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                guard flags == .control else { return event }
-                let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
-                switch key {
-                case "j", "n":
-                    NotificationCenter.default.post(NoteHighlightDelta.notification(delta: 1))
-                    return nil
-                case "k", "p":
-                    NotificationCenter.default.post(NoteHighlightDelta.notification(delta: -1))
-                    return nil
-                default:
-                    return event
-                }
-            }
-        }
-
-        func stop() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
-            }
-        }
-
-        deinit { stop() }
-    }
-}
-
 /// When a global hotkey is enabled, closing the window hides it instead of quitting.
+/// Chains the previous window delegate so SwiftUI's own delegate is preserved.
 private struct WindowCloseGuard: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.delegate = context.coordinator
+            context.coordinator.attach(to: view.window)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
-            nsView.window?.delegate = context.coordinator
+            context.coordinator.attach(to: nsView.window)
         }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.detach()
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator: NSObject, NSWindowDelegate {
+        private weak var window: NSWindow?
+        private weak var previousDelegate: NSWindowDelegate?
+
+        func attach(to window: NSWindow?) {
+            guard let window else { return }
+            if self.window === window { return }
+            detach()
+            self.window = window
+            previousDelegate = window.delegate
+            window.delegate = self
+        }
+
+        func detach() {
+            if let window, window.delegate === self {
+                window.delegate = previousDelegate
+            }
+            window = nil
+            previousDelegate = nil
+        }
+
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if UserDefaults.standard.bool(forKey: HotKeyDefaults.enabledKey) {
                 sender.orderOut(nil)
                 return false
             }
+            if let previousDelegate {
+                return previousDelegate.windowShouldClose?(sender) ?? true
+            }
             return true
+        }
+
+        override func responds(to aSelector: Selector!) -> Bool {
+            if super.responds(to: aSelector) { return true }
+            return previousDelegate?.responds(to: aSelector) ?? false
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            previousDelegate
         }
     }
 }

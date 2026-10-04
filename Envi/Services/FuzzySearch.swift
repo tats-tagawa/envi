@@ -28,20 +28,7 @@ enum FuzzySearch {
         var nonMatches: [RankedNote] = []
 
         for note in notes {
-            let titleScore = score(query: trimmed, in: note.title).map {
-                titleBoost(query: trimmed, title: note.title, base: $0)
-            }
-            let previewScore = score(query: trimmed, in: note.previewLine)
-            let bodyScore = score(query: trimmed, in: note.body)
-            let tagScore = note.tags.compactMap { score(query: trimmed, in: $0) }.max()
-            // Title hits (esp. exact / prefix) outrank body-only; tags & preview mid-tier.
-            let best = [
-                titleScore,
-                previewScore.map { $0 * 2 },
-                tagScore.map { $0 * 2 },
-                bodyScore
-            ].compactMap { $0 }.max() ?? -1
-
+            let best = bestScore(query: trimmed, note: note)
             if best >= 0 {
                 matches.append(RankedNote(note: note, matchesQuery: true, score: best))
             } else {
@@ -60,6 +47,34 @@ enum FuzzySearch {
         nonMatches.sort { $0.note.updatedAt > $1.note.updatedAt }
 
         return matches + nonMatches
+    }
+
+    /// Title / tags / preview first; only scan the full body when needed.
+    private static func bestScore(query: String, note: Note) -> Int {
+        let titleScore = score(query: query, in: note.title).map {
+            titleBoost(query: query, title: note.title, base: $0)
+        }
+        // Strong title hits already outrank body — skip the expensive body scan.
+        if let titleScore, titleScore >= 15_000 {
+            return titleScore
+        }
+
+        let previewScore = score(query: query, in: note.previewLine).map { $0 * 2 }
+        let tagScore = note.tags.compactMap { score(query: query, in: $0) }.max().map { $0 * 2 }
+
+        let lightBest = [titleScore, previewScore, tagScore].compactMap { $0 }.max()
+        if let lightBest, lightBest >= 0 {
+            // Still check body only when it could beat a weak title/preview/tag hit.
+            if lightBest >= 200 {
+                return lightBest
+            }
+            if let bodyScore = score(query: query, in: note.body) {
+                return max(lightBest, bodyScore)
+            }
+            return lightBest
+        }
+
+        return score(query: query, in: note.body) ?? -1
     }
 
     /// Rows the user can move between with ↑↓.
@@ -83,6 +98,13 @@ enum FuzzySearch {
         let t = Array(text.lowercased())
         guard !q.isEmpty else { return 0 }
         guard !t.isEmpty else { return nil }
+
+        // Fast reject: every query character must appear at least once.
+        var available = Dictionary(t.map { ($0, 1) }, uniquingKeysWith: +)
+        for ch in q {
+            guard let n = available[ch], n > 0 else { return nil }
+            available[ch] = n - 1
+        }
 
         var qi = 0
         var score = 0

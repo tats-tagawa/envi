@@ -9,6 +9,9 @@ import Foundation
 ///
 /// Note body…
 /// ```
+///
+/// The opening `---` block is only treated as frontmatter when it contains a `tags:` line.
+/// A horizontal rule or other `---` usage at the top of the body is left alone.
 enum NoteMarkdown {
     static func parse(_ raw: String) -> (tags: [String], body: String) {
         let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
@@ -22,6 +25,17 @@ enum NoteMarkdown {
         }
 
         let frontmatter = String(afterOpen[..<endRange.lowerBound])
+        // Require a tags key so `---` horizontal rules are not eaten as YAML.
+        guard frontmatter.split(separator: "\n", omittingEmptySubsequences: false)
+            .contains(where: {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .hasPrefix("tags:")
+            })
+        else {
+            return ([], raw)
+        }
+
         var body = String(afterOpen[endRange.upperBound...])
         if body.hasPrefix("\n") {
             body.removeFirst()

@@ -117,13 +117,16 @@ struct VimEngine {
         if awaitingSecondG {
             awaitingSecondG = false
             if ch == "g" {
+                // `5gg` goes to line 5; bare `gg` goes to the first line.
+                let lineTarget = countBuffer > 0 ? max(countBuffer, 1) : 1
+                let dest = indexOfLine(lineTarget, in: buffer)
                 if let op = pendingOperator {
                     clearPending()
                     preferredColumn = nil
-                    let range = buffer.linewiseRange(from: cursor, to: buffer.bufferStart())
+                    let range = buffer.linewiseRange(from: cursor, to: dest)
                     return applyOperator(op, range: range, linewise: true, buffer: buffer)
                 }
-                return finishMotion(to: buffer.bufferStart(), buffer: buffer, cursor: cursor)
+                return finishMotion(to: dest, buffer: buffer, cursor: cursor)
             }
             clearPending()
             return [.beep]
@@ -223,17 +226,15 @@ struct VimEngine {
             return [.paste(before: true)]
 
         case "d":
-            countBuffer = 0
+            // Keep countBuffer so `2dd` / `2dw` work (digits before the operator).
             pendingOperator = .delete
             return []
 
         case "c":
-            countBuffer = 0
             pendingOperator = .change
             return []
 
         case "y":
-            countBuffer = 0
             pendingOperator = .yank
             return []
 
@@ -329,7 +330,7 @@ struct VimEngine {
             return finishMotion(to: dest, buffer: buffer, cursor: cursor, resetColumn: true)
 
         case "g":
-            countBuffer = 0
+            // Keep countBuffer so `5gg` can jump to line 5.
             awaitingSecondG = true
             return []
 
@@ -516,8 +517,9 @@ struct VimEngine {
             if awaitingSecondG {
                 awaitingSecondG = false
                 if ch == "g" {
+                    let lineTarget = countBuffer > 0 ? max(countBuffer, 1) : 1
                     return updateVisualSelection(
-                        to: buffer.bufferStart(),
+                        to: indexOfLine(lineTarget, in: buffer),
                         anchor: anchor,
                         buffer: buffer,
                         resetColumn: true
