@@ -4,7 +4,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
-    @AppStorage("vimBodyModeEnabled") private var vimModeEnabled = true
+    @AppStorage("vimModeEnabled") private var vimModeEnabled = false
+    @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.yearMonthDay.rawValue
     @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
     @AppStorage(HotKeyDefaults.enabledKey) private var hotKeyEnabled = false
@@ -33,6 +34,11 @@ struct SettingsView: View {
 
             Section("Editing") {
                 Toggle("Vim mode (note body)", isOn: $vimModeEnabled)
+                Toggle("j/k move by wrapped lines", isOn: $vimJKMovesByDisplayLines)
+                    .disabled(!vimModeEnabled)
+                Text("When enabled, j and k step one soft-wrapped screen line instead of jumping to the next newline.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Date Modified") {

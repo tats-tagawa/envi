@@ -8,6 +8,11 @@ final class DirectoryWatcher {
     private var debounceWork: DispatchWorkItem?
     private let onChange: () -> Void
 
+    /// Latency before FSEvents delivers; higher = fewer wakeups, slightly slower external sync.
+    private static let latency: CFTimeInterval = 1.0
+    /// Coalesce bursts of events into one callback.
+    private static let debounce: TimeInterval = 0.5
+
     init(onChange: @escaping () -> Void) {
         self.onChange = onChange
     }
@@ -24,10 +29,11 @@ final class DirectoryWatcher {
         )
 
         let paths = [url.path] as CFArray
+        // Omit NoDefer so the system can batch events over `latency` instead of
+        // waking us on every small write.
         let flags = UInt32(
             kFSEventStreamCreateFlagUseCFTypes
                 | kFSEventStreamCreateFlagFileEvents
-                | kFSEventStreamCreateFlagNoDefer
         )
 
         guard let stream = FSEventStreamCreate(
@@ -40,7 +46,7 @@ final class DirectoryWatcher {
             &context,
             paths,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.2,
+            Self.latency,
             flags
         ) else {
             return
@@ -70,7 +76,7 @@ final class DirectoryWatcher {
             }
         }
         debounceWork = work
-        queue.asyncAfter(deadline: .now() + 0.2, execute: work)
+        queue.asyncAfter(deadline: .now() + Self.debounce, execute: work)
     }
 
     deinit {

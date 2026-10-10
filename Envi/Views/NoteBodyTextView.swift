@@ -16,12 +16,18 @@ final class FocusAwareTextView: NSTextView {
             }
         }
     }
+    /// When true, Normal/Visual j/k use soft-wrapped display lines (see Settings).
+    var vimJKMovesByDisplayLines = true
     var onVimModeChange: ((VimMode) -> Void)?
 
     private var vimEngine = VimEngine()
     private var yankRegister = VimYankRegister()
     /// Tracks cursor for visual mode after moveCursor + setSelection action pairs.
     private var vimCursorOverride: Int?
+
+    private var vimVerticalMover: VimVerticalMover? {
+        vimJKMovesByDisplayLines ? VimTextEditing.displayLineMover(for: self) : nil
+    }
 
     /// Open-from-search / note switch: land in Insert at end.
     func prepareVimInsertAtEnd() {
@@ -91,7 +97,8 @@ final class FocusAwareTextView: NSTextView {
             key: key,
             buffer: buffer,
             cursor: cursor,
-            selection: selection
+            selection: selection,
+            verticalMover: vimVerticalMover
         )
 
         if actions.isEmpty {
@@ -116,7 +123,8 @@ final class FocusAwareTextView: NSTextView {
                 key: .escape,
                 buffer: buffer,
                 cursor: cursor,
-                selection: selection
+                selection: selection,
+                verticalMover: vimVerticalMover
             )
             if !actions.isEmpty {
                 applyVimActions(actions)
@@ -250,6 +258,7 @@ struct NoteBodyTextView: NSViewRepresentable {
     var isFocused: Bool
     var vimEnabled: Bool
     @Binding var vimMode: VimMode
+    @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     var onBecameFirstResponder: () -> Void
     var onTextChange: (String) -> Void
 
@@ -284,6 +293,7 @@ struct NoteBodyTextView: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.string = text
         textView.vimEnabled = vimEnabled
+        textView.vimJKMovesByDisplayLines = vimJKMovesByDisplayLines
         textView.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onBecameFirstResponder()
         }
@@ -310,6 +320,7 @@ struct NoteBodyTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? FocusAwareTextView else { return }
         context.coordinator.parent = self
         textView.vimEnabled = vimEnabled
+        textView.vimJKMovesByDisplayLines = vimJKMovesByDisplayLines
         textView.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onBecameFirstResponder()
         }

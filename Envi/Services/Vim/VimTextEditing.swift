@@ -117,4 +117,121 @@ enum VimTextEditing {
     static func normalCursor(from selection: NSRange, buffer: VimBuffer) -> Int {
         buffer.clampCursor(selection.location)
     }
+
+    // MARK: - Display-line (soft-wrap) motion
+
+    /// `j`/`k` by visual line fragments. `preferredColumn` stores screen X (points), not buffer column.
+    static func displayLineMover(for textView: NSTextView) -> VimVerticalMover {
+        VimVerticalMover(
+            moveUp: { cursor, count, preferredColumn in
+                moveByDisplayLine(textView, from: cursor, steps: -count, preferredScreenX: &preferredColumn)
+            },
+            moveDown: { cursor, count, preferredColumn in
+                moveByDisplayLine(textView, from: cursor, steps: count, preferredScreenX: &preferredColumn)
+            }
+        )
+    }
+
+    static func moveByDisplayLine(
+        _ textView: NSTextView,
+        from cursor: Int,
+        steps: Int,
+        preferredScreenX: inout Int?
+    ) -> Int {
+        let buffer = VimBuffer(textView.string)
+        guard buffer.length > 0 else { return 0 }
+        guard steps != 0,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            var col = preferredScreenX
+            // Without layout, fall back to buffer lines using whatever column we have.
+            let dest = steps > 0
+                ? buffer.moveDown(cursor, count: abs(steps), preferredColumn: &col)
+                : buffer.moveUp(cursor, count: abs(steps), preferredColumn: &col)
+            preferredScreenX = col
+            return dest
+        }
+
+        layoutManager.ensureLayout(for: textContainer)
+
+        var index = buffer.clampCursor(cursor)
+        var glyphIndex = layoutManager.glyphIndexForCharacter(at: index)
+        glyphIndex = min(glyphIndex, max(layoutManager.numberOfGlyphs - 1, 0))
+
+        var fragmentRange = NSRange(location: 0, length: 0)
+        _ = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: &fragmentRange)
+
+        if preferredScreenX == nil {
+            let locationInFragment = layoutManager.location(forGlyphAt: glyphIndex)
+            preferredScreenX = Int(locationInFragment.x.rounded())
+        }
+        let targetX = CGFloat(preferredScreenX ?? 0)
+
+        let direction = steps > 0 ? 1 : -1
+        for _ in 0..<abs(steps) {
+            if direction > 0 {
+                let nextGlyph = NSMaxRange(fragmentRange)
+                guard nextGlyph < layoutManager.numberOfGlyphs else { break }
+                glyphIndex = nextGlyph
+            } else {
+                guard fragmentRange.location > 0 else { break }
+                glyphIndex = fragmentRange.location - 1
+            }
+            let fragmentRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &fragmentRange
+            )
+            index = characterIndex(
+                nearX: targetX,
+                in: fragmentRect,
+                glyphRange: fragmentRange,
+                layoutManager: layoutManager,
+                textContainer: textContainer,
+                buffer: buffer
+            )
+        }
+
+        return buffer.clampCursor(index)
+    }
+
+    private static func characterIndex(
+        nearX targetX: CGFloat,
+        in fragmentRect: NSRect,
+        glyphRange: NSRange,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        buffer: VimBuffer
+    ) -> Int {
+        let point = NSPoint(x: fragmentRect.minX + targetX, y: fragmentRect.midY)
+        var fraction: CGFloat = 0
+        var glyphIndex = layoutManager.glyphIndex(
+            for: point,
+            in: textContainer,
+            fractionOfDistanceThroughGlyph: &fraction
+        )
+        // Keep the result inside this display line's glyph range.
+        if glyphIndex < glyphRange.location {
+            glyphIndex = glyphRange.location
+        } else if glyphIndex >= NSMaxRange(glyphRange) {
+            glyphIndex = max(glyphRange.location, NSMaxRange(glyphRange) - 1)
+        }
+
+        var charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        let charRange = layoutManager.characterRange(
+            forGlyphRange: glyphRange,
+            actualGlyphRange: nil
+        )
+        if charRange.length > 0 {
+            let end = NSMaxRange(charRange)
+            charIndex = min(max(charIndex, charRange.location), end - 1)
+            // Prefer landing on content, not the trailing newline of a hard line break.
+            if charIndex > charRange.location {
+                let c = buffer.text.character(at: charIndex)
+                if c == 0x0A || c == 0x0D {
+                    charIndex -= 1
+                }
+            }
+        }
+        return buffer.clampCursor(charIndex)
+    }
 }
