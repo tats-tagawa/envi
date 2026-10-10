@@ -7,8 +7,6 @@ private enum SearchFieldMode: Equatable {
     case querying
     /// Field shows the selected note's title (not editing the filename).
     case showingTitle
-    /// Field is being used to rename the selected note.
-    case renaming
 }
 
 struct ContentView: View {
@@ -21,22 +19,20 @@ struct ContentView: View {
     @State private var sortOrder: [KeyPathComparator<RankedNote>] = [
         .init(\.note.updatedAt, order: .reverse)
     ]
-    @State private var isEditingTags = false
-    @State private var tagsDraft = ""
+    @State private var listInlineEdit: ResultsInlineEdit?
     @State private var notePendingDeletion: Note?
     @State private var renameCollisionMessage: String?
     @FocusState private var editorFocus: EditorFocusTarget?
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
-    /// Fresh key so earlier default-off installs pick up Vim without a Settings visit.
-    @AppStorage("vimBodyModeEnabled") private var vimModeEnabled = true
+    /// Fresh key so prior default-on installs pick up Vim-off without a Settings visit.
+    @AppStorage("vimModeEnabled") private var vimModeEnabled = false
     @State private var vimMode: VimMode = .insert
 
     /// Rank against the active search query. When the field is showing a selected
-    /// note's title (or mid-rename), keep using `savedSearchText` so ↑↓ / ⌘J/K
-    /// does not reshuffle the list.
+    /// note's title, keep using `savedSearchText` so ↑↓ / ⌘J/K does not reshuffle the list.
     private var rankingQuery: String {
         switch searchMode {
-        case .showingTitle, .renaming:
+        case .showingTitle:
             return savedSearchText
         case .querying:
             return searchText
@@ -137,17 +133,6 @@ struct ContentView: View {
             let delta = note.userInfo?[NoteHighlightDelta.userInfoKey] as? Int ?? 0
             moveHighlight(by: delta)
         }
-        .sheet(isPresented: $isEditingTags) {
-            TagEditorSheet(
-                noteTitle: store.selectedNote?.title ?? "",
-                tagsText: $tagsDraft,
-                onCancel: { isEditingTags = false },
-                onSave: {
-                    commitTagsDraft()
-                    isEditingTags = false
-                }
-            )
-        }
     }
 
     @ViewBuilder
@@ -189,6 +174,7 @@ struct ContentView: View {
             searchText: $searchText,
             highlightedIndex: $highlightedIndex,
             sortOrder: $sortOrder,
+            inlineEdit: $listInlineEdit,
             editorFocus: $editorFocus,
             selectedNoteID: store.selectedNoteID,
             rankingQuery: rankingQuery,
@@ -198,8 +184,8 @@ struct ContentView: View {
             onHighlightIndex: highlightIndex,
             onSearchEdited: handleSearchEdited,
             onClearSearch: clearSearch,
-            onBeginRename: beginRename(at:),
-            onBeginEditTags: beginEditTags(at:),
+            onCommitTitle: commitListTitle,
+            onCommitTags: commitListTags,
             onBeginDelete: beginDelete(at:)
         )
     }
@@ -267,32 +253,17 @@ struct ContentView: View {
     }
 
     private func beginRenameSelected() {
-        guard store.selectedNote != nil else { return }
-        if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == store.selectedNoteID }) {
-            beginRename(at: idx)
-        }
-    }
-
-    private func beginRename(at index: Int) {
-        selectIndex(index)
-        guard let note = store.selectedNote else { return }
-        searchMode = .renaming
-        setSearchProgrammatically(note.title)
-        focusSearch(selectAll: true)
+        guard let id = store.selectedNoteID,
+              let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == id }) else { return }
+        selectIndex(idx)
+        listInlineEdit = .title(id)
     }
 
     private func beginEditTagsSelected() {
-        guard store.selectedNote != nil else { return }
-        if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == store.selectedNoteID }) {
-            beginEditTags(at: idx)
-        }
-    }
-
-    private func beginEditTags(at index: Int) {
-        selectIndex(index)
-        guard let note = store.selectedNote else { return }
-        tagsDraft = note.tags.joined(separator: ", ")
-        isEditingTags = true
+        guard let id = store.selectedNoteID,
+              let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == id }) else { return }
+        selectIndex(idx)
+        listInlineEdit = .tags(id)
     }
 
     private func beginDeleteSelected() {
@@ -305,26 +276,19 @@ struct ContentView: View {
         notePendingDeletion = displayedNotes[index].note
     }
 
-    private func commitTagsDraft() {
-        guard let note = store.selectedNote else { return }
-        let tags = tagsDraft
-            .split(separator: ",")
-            .map { String($0) }
-        store.updateTags(tags, for: note.fileURL)
+    private func commitListTitle(_ noteID: URL, _ title: String) {
+        let outcome = store.updateTitle(title, for: noteID)
+        handleRenameOutcome(outcome)
+        if searchMode == .showingTitle, let selected = store.selectedNote {
+            adoptSearchTitle(from: selected)
+        }
     }
 
-    private func commitRenameIfNeeded() -> Bool {
-        guard searchMode == .renaming, let note = store.selectedNote else { return false }
-        let title = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let outcome = store.updateTitle(title, for: note.fileURL)
-        handleRenameOutcome(outcome)
-        if let selected = store.selectedNote {
-            adoptSearchTitle(from: selected)
-        } else {
-            searchMode = .querying
-        }
-        focusBodyAtEnd()
-        return true
+    private func commitListTags(_ noteID: URL, _ tagsText: String) {
+        let tags = tagsText
+            .split(separator: ",")
+            .map { String($0) }
+        store.updateTags(tags, for: noteID)
     }
 
     private func handleRenameOutcome(_ outcome: NoteRenameOutcome) {
@@ -375,10 +339,8 @@ struct ContentView: View {
         }
     }
 
-    /// Return in the search field: finish rename, open a match, or create when nothing matches.
+    /// Return in the search field: open a match, or create when nothing matches.
     private func activateSearch() {
-        if commitRenameIfNeeded() { return }
-
         let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         // While showing a selected title with an empty ranking query, Return edits the body.
         if searchMode == .showingTitle, store.selectedNote != nil {
@@ -434,41 +396,6 @@ struct ContentView: View {
             if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == selected.fileURL }) {
                 highlightedIndex = idx
             }
-        }
-    }
-}
-
-private struct TagEditorSheet: View {
-    let noteTitle: String
-    @Binding var tagsText: String
-    var onCancel: () -> Void
-    var onSave: () -> Void
-    @FocusState private var tagsFieldFocused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Tags")
-                .font(.headline)
-            Text(noteTitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            TextField("Comma-separated tags", text: $tagsText)
-                .textFieldStyle(.roundedBorder)
-                .focused($tagsFieldFocused)
-                .onSubmit(onSave)
-            HStack {
-                Spacer()
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Button("Save", action: onSave)
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 360)
-        .onAppear {
-            tagsFieldFocused = true
         }
     }
 }

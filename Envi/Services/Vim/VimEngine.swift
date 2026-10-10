@@ -7,6 +7,23 @@ enum VimKey: Equatable {
     case ctrl(Character)
 }
 
+/// Vertical motion for Normal/Visual `j`/`k`. Operator-pending `j`/`k` always uses buffer lines.
+struct VimVerticalMover {
+    let moveUp: (_ cursor: Int, _ count: Int, _ preferredColumn: inout Int?) -> Int
+    let moveDown: (_ cursor: Int, _ count: Int, _ preferredColumn: inout Int?) -> Int
+
+    static func bufferLines(_ buffer: VimBuffer) -> VimVerticalMover {
+        VimVerticalMover(
+            moveUp: { cursor, count, preferredColumn in
+                buffer.moveUp(cursor, count: count, preferredColumn: &preferredColumn)
+            },
+            moveDown: { cursor, count, preferredColumn in
+                buffer.moveDown(cursor, count: count, preferredColumn: &preferredColumn)
+            }
+        )
+    }
+}
+
 enum VimOperator: Equatable {
     case delete
     case change
@@ -38,6 +55,8 @@ struct VimEngine {
     private var awaitingSecondG = false
     private var preferredColumn: Int?
     private var visualAnchor: Int?
+    /// Active only for the current `handle` call; used by Normal/Visual `j`/`k`.
+    private var verticalMover: VimVerticalMover?
 
     mutating func resetForFocus(insert: Bool) {
         mode = insert ? .insert : .normal
@@ -50,8 +69,11 @@ struct VimEngine {
         key: VimKey,
         buffer: VimBuffer,
         cursor: Int,
-        selection: NSRange
+        selection: NSRange,
+        verticalMover: VimVerticalMover? = nil
     ) -> [VimAction] {
+        self.verticalMover = verticalMover
+        defer { self.verticalMover = nil }
         switch mode {
         case .insert:
             return handleInsert(key: key)
@@ -276,16 +298,20 @@ struct VimEngine {
             )
 
         case "j":
-            var col = preferredColumn
-            let dest = buffer.moveDown(cursor, count: count, preferredColumn: &col)
-            preferredColumn = col
-            return finishMotion(to: dest, buffer: buffer, cursor: cursor, resetColumn: false)
+            return finishMotion(
+                to: moveVertically(down: true, cursor: cursor, count: count, buffer: buffer),
+                buffer: buffer,
+                cursor: cursor,
+                resetColumn: false
+            )
 
         case "k":
-            var col = preferredColumn
-            let dest = buffer.moveUp(cursor, count: count, preferredColumn: &col)
-            preferredColumn = col
-            return finishMotion(to: dest, buffer: buffer, cursor: cursor, resetColumn: false)
+            return finishMotion(
+                to: moveVertically(down: false, cursor: cursor, count: count, buffer: buffer),
+                buffer: buffer,
+                cursor: cursor,
+                resetColumn: false
+            )
 
         case "w":
             return finishMotion(
@@ -556,14 +582,10 @@ struct VimEngine {
                     resetColumn: true
                 )
             case "j":
-                var col = preferredColumn
-                let dest = buffer.moveDown(cursor, count: count, preferredColumn: &col)
-                preferredColumn = col
+                let dest = moveVertically(down: true, cursor: cursor, count: count, buffer: buffer)
                 return updateVisualSelection(to: dest, anchor: anchor, buffer: buffer, resetColumn: false)
             case "k":
-                var col = preferredColumn
-                let dest = buffer.moveUp(cursor, count: count, preferredColumn: &col)
-                preferredColumn = col
+                let dest = moveVertically(down: false, cursor: cursor, count: count, buffer: buffer)
                 return updateVisualSelection(to: dest, anchor: anchor, buffer: buffer, resetColumn: false)
             case "w":
                 return updateVisualSelection(
@@ -692,6 +714,23 @@ struct VimEngine {
     }
 
     // MARK: - Helpers
+
+    /// Normal/Visual vertical motion. Uses `verticalMover` when provided (display lines);
+    /// otherwise buffer (newline) lines. Updates `preferredColumn`.
+    private mutating func moveVertically(
+        down: Bool,
+        cursor: Int,
+        count: Int,
+        buffer: VimBuffer
+    ) -> Int {
+        var col = preferredColumn
+        let mover = verticalMover ?? .bufferLines(buffer)
+        let dest = down
+            ? mover.moveDown(cursor, count, &col)
+            : mover.moveUp(cursor, count, &col)
+        preferredColumn = col
+        return dest
+    }
 
     private mutating func clearPending() {
         countBuffer = 0

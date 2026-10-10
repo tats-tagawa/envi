@@ -14,10 +14,10 @@ extension Notification.Name {
     /// ⌘D — deselect the current note and restore the previous search text.
     static let deselectRestoreSearch = Notification.Name("Envi.deselectRestoreSearch")
 
-    /// ⌘R — rename the selected note via the search field.
+    /// ⌘R — rename the selected note inline in the results list.
     static let renameSelectedNote = Notification.Name("Envi.renameSelectedNote")
 
-    /// ⌘⇧T — edit tags for the selected note.
+    /// ⌘⇧T — edit tags inline in the results list.
     static let editTags = Notification.Name("Envi.editTags")
 
     /// ⌫ / Delete — move the selected note to the Trash.

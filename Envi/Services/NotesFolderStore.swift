@@ -22,12 +22,13 @@ final class NotesFolderStore {
     private var isAccessingSecurityScope = false
     private var watcher: DirectoryWatcher?
     private var saveTasks: [URL: Task<Void, Never>] = [:]
-    /// While set, ignore directory-watcher reloads so our own writes do not bounce back.
-    private var suppressReloadUntil: Date?
+    /// While set, drop watcher callbacks entirely (own atomic writes / renames).
+    /// Unlike a "retry later" suppress, this avoids a full folder re-read after every keystroke save.
+    private var ignoreWatcherUntil: Date?
     private var isReloading = false
-    /// Set when a reload was skipped (suppress window or nested call); retry soon.
+    /// Set when a reload was skipped because another reload is in flight.
     private var reloadNeeded = false
-    private var deferredReloadTask: Task<Void, Never>?
+    private var coalescedWatcherReloadTask: Task<Void, Never>?
 
     var selectedNote: Note? {
         guard let selectedNoteID else { return nil }
@@ -140,11 +141,8 @@ final class NotesFolderStore {
     func reloadNotes() {
         guard let folderURL else { return }
 
-        // Skip reloads right after we wrote or renamed a file (watcher echo),
-        // but remember to run once the suppress window ends.
-        if let until = suppressReloadUntil, Date() < until {
-            reloadNeeded = true
-            scheduleDeferredReload(after: until)
+        // Own write/rename echoes: drop completely (in-memory state is already current).
+        if let until = ignoreWatcherUntil, Date() < until {
             return
         }
 
@@ -195,7 +193,11 @@ final class NotesFolderStore {
                 )
             }
 
-            notes = loaded.sorted { $0.updatedAt > $1.updatedAt }
+            // Avoid observable churn when nothing on disk changed.
+            let sorted = loaded.sorted { $0.updatedAt > $1.updatedAt }
+            if sorted != notes {
+                notes = sorted
+            }
 
             if let selectedNoteID,
                !notes.contains(where: { $0.fileURL == selectedNoteID }) {
@@ -213,26 +215,28 @@ final class NotesFolderStore {
         }
     }
 
-    private func scheduleDeferredReload(after date: Date) {
-        deferredReloadTask?.cancel()
-        let delay = max(date.timeIntervalSinceNow, 0.05)
-        deferredReloadTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            if reloadNeeded {
-                reloadNotes()
-            }
-        }
-    }
-
     private func startWatching(_ url: URL) {
         watcher?.stop()
+        coalescedWatcherReloadTask?.cancel()
         watcher = DirectoryWatcher { [weak self] in
             Task { @MainActor in
-                self?.reloadNotes()
+                self?.scheduleWatcherReload()
             }
         }
         watcher?.watch(url: url)
+    }
+
+    /// Coalesce FSEvents bursts into a single reload after the folder settles.
+    private func scheduleWatcherReload() {
+        if let until = ignoreWatcherUntil, Date() < until {
+            return
+        }
+        coalescedWatcherReloadTask?.cancel()
+        coalescedWatcherReloadTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            reloadNotes()
+        }
     }
 
     // MARK: - CRUD
@@ -381,8 +385,8 @@ final class NotesFolderStore {
     }
 
     private func suppressReloadBriefly() {
-        // Longer than DirectoryWatcher's debounce so our write is ignored once.
-        suppressReloadUntil = Date().addingTimeInterval(0.5)
+        // Cover FSEvents latency + debounce so our own writes never force a full re-read.
+        ignoreWatcherUntil = Date().addingTimeInterval(2.0)
     }
 
     private func uniqueFileURL(forTitle title: String, in folder: URL, excluding: URL? = nil) -> URL {

@@ -79,4 +79,72 @@ final class VimEngineTests: XCTestCase {
         }
         XCTAssertEqual((text as NSString).substring(with: range), "alpha beta ")
     }
+
+    func testVerticalMoverIsUsedForNormalJK() {
+        let text = "one\ntwo\nthree"
+        var engine = VimEngine()
+        engine.resetForFocus(insert: false)
+        let buf = buffer(text)
+
+        var moveDownCalls = 0
+        let mover = VimVerticalMover(
+            moveUp: { cursor, _, _ in cursor },
+            moveDown: { cursor, count, _ in
+                moveDownCalls += count
+                return min(cursor + 1, buf.length - 1)
+            }
+        )
+
+        let actions = engine.handle(
+            key: .character("j"),
+            buffer: buf,
+            cursor: 0,
+            selection: NSRange(location: 0, length: 1),
+            verticalMover: mover
+        )
+
+        XCTAssertEqual(moveDownCalls, 1)
+        guard case .moveCursor(let index) = actions.first else {
+            return XCTFail("Expected moveCursor, got \(actions)")
+        }
+        XCTAssertEqual(index, 1)
+    }
+
+    func testOperatorJKStillUsesBufferLines() {
+        // Even with a vertical mover, operator-pending j stays linewise on buffer lines.
+        let text = "one\ntwo\nthree\n"
+        var engine = VimEngine()
+        engine.resetForFocus(insert: false)
+        let buf = buffer(text)
+
+        var moveDownCalls = 0
+        let mover = VimVerticalMover(
+            moveUp: { cursor, _, _ in cursor },
+            moveDown: { cursor, count, _ in
+                moveDownCalls += count
+                return cursor
+            }
+        )
+
+        _ = engine.handle(
+            key: .character("d"),
+            buffer: buf,
+            cursor: 0,
+            selection: NSRange(location: 0, length: 1),
+            verticalMover: mover
+        )
+        let actions = engine.handle(
+            key: .character("j"),
+            buffer: buf,
+            cursor: 0,
+            selection: NSRange(location: 0, length: 1),
+            verticalMover: mover
+        )
+
+        XCTAssertEqual(moveDownCalls, 0, "Operator j/k must not use the display-line mover")
+        guard case .delete(let range, yank: true, linewise: true) = actions.first else {
+            return XCTFail("Expected linewise delete, got \(actions)")
+        }
+        XCTAssertEqual(range, NSRange(location: 0, length: 8)) // "one\ntwo\n"
+    }
 }

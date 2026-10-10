@@ -2,21 +2,26 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var defaultsObserver: NSObjectProtocol?
+    /// Last hotkey config we applied — skip no-op re-registers.
+    private var appliedHotKey: (enabled: Bool, keyCode: UInt32, modifiers: UInt32)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
         Task { @MainActor in
             self.syncHotKeyFromDefaults()
         }
+        // Only react to our hotkey keys. `didChangeNotification` fires for many writes
+        // (including our own `lastRegisterFailed` flag) and was waking the main actor idle.
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
-            object: nil,
+            object: UserDefaults.standard,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                AppDelegate.shared?.syncHotKeyFromDefaults()
+                self.syncHotKeyFromDefaultsIfNeeded()
             }
         }
-        AppDelegate.shared = self
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -35,15 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static weak var shared: AppDelegate?
 
     @MainActor
-    private func syncHotKeyFromDefaults() {
+    private func syncHotKeyFromDefaultsIfNeeded() {
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: HotKeyDefaults.enabledKey)
-        guard enabled else {
-            GlobalHotKey.shared.unregister()
-            defaults.set(false, forKey: HotKeyDefaults.lastRegisterFailedKey)
-            return
-        }
-
         let keyCode = UInt32(
             defaults.object(forKey: HotKeyDefaults.keyCodeKey) as? Int
                 ?? Int(HotKeyDefaults.defaultKeyCode)
@@ -52,10 +51,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defaults.object(forKey: HotKeyDefaults.modifiersKey) as? Int
                 ?? Int(HotKeyDefaults.defaultModifiers)
         )
+        if let applied = appliedHotKey,
+           applied.enabled == enabled,
+           applied.keyCode == keyCode,
+           applied.modifiers == modifiers {
+            return
+        }
+        syncHotKeyFromDefaults()
+    }
+
+    @MainActor
+    private func syncHotKeyFromDefaults() {
+        let defaults = UserDefaults.standard
+        let enabled = defaults.bool(forKey: HotKeyDefaults.enabledKey)
+        let keyCode = UInt32(
+            defaults.object(forKey: HotKeyDefaults.keyCodeKey) as? Int
+                ?? Int(HotKeyDefaults.defaultKeyCode)
+        )
+        let modifiers = UInt32(
+            defaults.object(forKey: HotKeyDefaults.modifiersKey) as? Int
+                ?? Int(HotKeyDefaults.defaultModifiers)
+        )
+
+        appliedHotKey = (enabled, keyCode, modifiers)
+
+        guard enabled else {
+            GlobalHotKey.shared.unregister()
+            if defaults.bool(forKey: HotKeyDefaults.lastRegisterFailedKey) {
+                defaults.set(false, forKey: HotKeyDefaults.lastRegisterFailedKey)
+            }
+            return
+        }
+
         let ok = GlobalHotKey.shared.register(keyCode: keyCode, carbonModifiers: modifiers) {
             AppDelegate.toggleMainWindow()
         }
-        defaults.set(!ok, forKey: HotKeyDefaults.lastRegisterFailedKey)
+        let failed = !ok
+        if defaults.bool(forKey: HotKeyDefaults.lastRegisterFailedKey) != failed {
+            defaults.set(failed, forKey: HotKeyDefaults.lastRegisterFailedKey)
+        }
     }
 
     @MainActor
