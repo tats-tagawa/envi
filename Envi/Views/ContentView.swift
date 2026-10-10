@@ -186,7 +186,8 @@ struct ContentView: View {
             onClearSearch: clearSearch,
             onCommitTitle: commitListTitle,
             onCommitTags: commitListTags,
-            onBeginDelete: beginDelete(at:)
+            onBeginDelete: beginDelete(at:),
+            reconcileSearchChanges: !isSettingSearchProgrammatically
         )
     }
 

@@ -22,13 +22,21 @@ final class NotesFolderStore {
     private var isAccessingSecurityScope = false
     private var watcher: DirectoryWatcher?
     private var saveTasks: [URL: Task<Void, Never>] = [:]
-    /// While set, drop watcher callbacks entirely (own atomic writes / renames).
-    /// Unlike a "retry later" suppress, this avoids a full folder re-read after every keystroke save.
+    /// Bumped so a cancelled debounce cannot clear a newer save.
+    private var saveGeneration: [URL: Int] = [:]
+    /// Notes whose in-memory text has not been written successfully.
+    private var dirtyNoteIDs: Set<URL> = []
+    /// While set, watcher callbacks are deferred instead of applied immediately.
+    /// Unlike dropping them, a reload still runs when the window ends.
     private var ignoreWatcherUntil: Date?
+    /// An external change arrived during `ignoreWatcherUntil` and still needs a reload.
+    private var watcherReloadPending = false
     private var isReloading = false
     /// Set when a reload was skipped because another reload is in flight.
     private var reloadNeeded = false
     private var coalescedWatcherReloadTask: Task<Void, Never>?
+    private var deferredWatcherReloadTask: Task<Void, Never>?
+    nonisolated(unsafe) private var flushObserver: NSObjectProtocol?
 
     var selectedNote: Note? {
         guard let selectedNoteID else { return nil }
@@ -38,16 +46,24 @@ final class NotesFolderStore {
     var hasFolder: Bool { folderURL != nil }
 
     init() {
-        NotificationCenter.default.addObserver(
+        // `queue: nil` runs the block on the posting thread before
+        // `applicationWillTerminate` returns. A main-queue hop is too late on quit.
+        flushObserver = NotificationCenter.default.addObserver(
             forName: .flushPendingNotes,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.flushPendingSaves()
             }
         }
         restoreBookmark()
+    }
+
+    deinit {
+        if let flushObserver {
+            NotificationCenter.default.removeObserver(flushObserver)
+        }
     }
 
     // MARK: - Folder
@@ -141,10 +157,14 @@ final class NotesFolderStore {
     func reloadNotes() {
         guard let folderURL else { return }
 
-        // Own write/rename echoes: drop completely (in-memory state is already current).
+        // Own write/rename echoes: wait until the suppression window ends, then reload
+        // once so an external edit that arrived in the meantime is not lost.
         if let until = ignoreWatcherUntil, Date() < until {
+            watcherReloadPending = true
+            scheduleReloadWhenSuppressionEnds(until: until)
             return
         }
+        watcherReloadPending = false
 
         if isReloading {
             reloadNeeded = true
@@ -166,27 +186,35 @@ final class NotesFolderStore {
             )
 
             var loaded: [Note] = []
+            var unread: [String] = []
             for url in urls where url.pathExtension.lowercased() == "md" {
                 let isFile = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? true
                 guard isFile else { continue }
 
-                // Keep in-memory text if a debounced save for this note is still pending.
+                // Keep in-memory text until a save succeeds, so a reload cannot revert it.
                 if let pending = notes.first(where: { $0.fileURL == url }),
-                   saveTasks[url] != nil {
+                   saveTasks[url] != nil || dirtyNoteIDs.contains(url) {
                     loaded.append(pending)
                     continue
                 }
 
-                let raw = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let title = url.deletingPathExtension().lastPathComponent
+                let raw: String
+                do {
+                    raw = try String(contentsOf: url, encoding: .utf8)
+                } catch {
+                    unread.append(title)
+                    continue
+                }
                 let parsed = NoteMarkdown.parse(raw)
                 let timestamps = Note.fileTimestamps(for: url)
-                let title = url.deletingPathExtension().lastPathComponent
                 loaded.append(
                     Note(
                         fileURL: url,
                         title: title,
                         body: parsed.body,
                         tags: parsed.tags,
+                        frontmatter: parsed.frontmatter,
                         createdAt: timestamps.created,
                         updatedAt: timestamps.updated
                     )
@@ -203,7 +231,13 @@ final class NotesFolderStore {
                !notes.contains(where: { $0.fileURL == selectedNoteID }) {
                 self.selectedNoteID = nil
             }
-            errorMessage = nil
+            if unread.isEmpty {
+                if dirtyNoteIDs.isEmpty {
+                    errorMessage = nil
+                }
+            } else {
+                errorMessage = "Could not read \(unread.joined(separator: ", ")) as UTF-8. Those files were left unchanged."
+            }
         } catch {
             errorMessage = "Failed to read notes: \(error.localizedDescription)"
         }
@@ -218,6 +252,8 @@ final class NotesFolderStore {
     private func startWatching(_ url: URL) {
         watcher?.stop()
         coalescedWatcherReloadTask?.cancel()
+        deferredWatcherReloadTask?.cancel()
+        watcherReloadPending = false
         watcher = DirectoryWatcher { [weak self] in
             Task { @MainActor in
                 self?.scheduleWatcherReload()
@@ -229,12 +265,32 @@ final class NotesFolderStore {
     /// Coalesce FSEvents bursts into a single reload after the folder settles.
     private func scheduleWatcherReload() {
         if let until = ignoreWatcherUntil, Date() < until {
+            watcherReloadPending = true
+            scheduleReloadWhenSuppressionEnds(until: until)
             return
         }
         coalescedWatcherReloadTask?.cancel()
         coalescedWatcherReloadTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
+            reloadNotes()
+        }
+    }
+
+    /// One reload after our own writes stop suppressing the watcher.
+    private func scheduleReloadWhenSuppressionEnds(until: Date) {
+        deferredWatcherReloadTask?.cancel()
+        let delay = until.timeIntervalSinceNow + 0.05
+        deferredWatcherReloadTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
+            guard !Task.isCancelled else { return }
+            if let until = ignoreWatcherUntil, Date() < until {
+                scheduleReloadWhenSuppressionEnds(until: until)
+                return
+            }
+            guard watcherReloadPending else { return }
             reloadNotes()
         }
     }
@@ -303,6 +359,12 @@ final class NotesFolderStore {
             notes[index].fileURL = destination
             notes[index].title = destination.deletingPathExtension().lastPathComponent
             notes[index].updatedAt = timestamps.updated
+            if dirtyNoteIDs.remove(noteID) != nil {
+                dirtyNoteIDs.insert(destination)
+            }
+            if let generation = saveGeneration.removeValue(forKey: noteID) {
+                saveGeneration[destination] = generation
+            }
             if selectedNoteID == noteID {
                 selectedNoteID = destination
             }
@@ -338,6 +400,8 @@ final class NotesFolderStore {
             var trashed: NSURL?
             try FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
             notes.remove(at: index)
+            dirtyNoteIDs.remove(noteID)
+            saveGeneration.removeValue(forKey: noteID)
             if selectedNoteID == noteID {
                 selectedNoteID = nil
             }
@@ -354,33 +418,50 @@ final class NotesFolderStore {
 
     private func scheduleSave(noteID: URL) {
         saveTasks[noteID]?.cancel()
+        dirtyNoteIDs.insert(noteID)
+        let generation = (saveGeneration[noteID] ?? 0) + 1
+        saveGeneration[noteID] = generation
         saveTasks[noteID] = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            persistBody(for: noteID)
-            saveTasks[noteID] = nil
+            guard saveGeneration[noteID] == generation else { return }
+            if persistBody(for: noteID), saveGeneration[noteID] == generation {
+                dirtyNoteIDs.remove(noteID)
+                saveTasks[noteID] = nil
+            }
         }
     }
 
     private func flushSave(for noteID: URL) {
         saveTasks[noteID]?.cancel()
         saveTasks[noteID] = nil
-        persistBody(for: noteID)
+        saveGeneration[noteID, default: 0] += 1
+        if persistBody(for: noteID) {
+            dirtyNoteIDs.remove(noteID)
+        }
     }
 
-    private func persistBody(for noteID: URL) {
-        guard let note = notes.first(where: { $0.fileURL == noteID }) else { return }
+    @discardableResult
+    private func persistBody(for noteID: URL) -> Bool {
+        guard let note = notes.first(where: { $0.fileURL == noteID }) else { return false }
         do {
             suppressReloadBriefly()
-            let raw = NoteMarkdown.serialize(tags: note.tags, body: note.body)
+            let raw = NoteMarkdown.serialize(
+                tags: note.tags,
+                body: note.body,
+                frontmatter: note.frontmatter
+            )
             try raw.write(to: note.fileURL, atomically: true, encoding: .utf8)
             if let index = notes.firstIndex(where: { $0.fileURL == noteID }) {
                 let timestamps = Note.fileTimestamps(for: note.fileURL)
                 notes[index].updatedAt = timestamps.updated
                 notes[index].createdAt = timestamps.created
             }
+            return true
         } catch {
+            dirtyNoteIDs.insert(noteID)
             errorMessage = "Could not save note: \(error.localizedDescription)"
+            return false
         }
     }
 
