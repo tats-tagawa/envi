@@ -6,15 +6,22 @@ struct Note: Identifiable, Hashable, Sendable {
     var title: String
     var body: String
     var tags: [String]
+    /// Frontmatter lines other than `tags:`, with a `.tags` slot so a save keeps their order.
+    var frontmatter: [NoteMarkdown.FrontmatterEntry] = []
     var createdAt: Date
     var updatedAt: Date
 
     /// First non-empty body line for list previews; falls back when the note is blank.
     var previewLine: String {
-        if let line = body.split(whereSeparator: \.isNewline)
-            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
-            .first(where: { !$0.isEmpty }) {
-            return line
+        var index = body.startIndex
+        while index < body.endIndex {
+            let newline = body[index...].firstIndex(where: \.isNewline) ?? body.endIndex
+            let line = body[index..<newline].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !line.isEmpty {
+                return String(line)
+            }
+            if newline == body.endIndex { break }
+            index = body.index(after: newline)
         }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty, trimmedTitle.caseInsensitiveCompare("Untitled") != .orderedSame {

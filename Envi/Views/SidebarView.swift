@@ -28,6 +28,8 @@ struct SidebarView: View {
     var onCommitTitle: (URL, String) -> Void
     var onCommitTags: (URL, String) -> Void
     var onBeginDelete: (Int) -> Void
+    /// False while ContentView is writing the search field itself (⌘D, selection title).
+    var reconcileSearchChanges: Bool = true
 
     @State private var editDraft = ""
     @FocusState private var inlineFieldFocused: Bool
@@ -63,7 +65,9 @@ struct SidebarView: View {
                 }
                 .onChange(of: searchText) { _, _ in
                     onSearchEdited()
-                    reconcileHighlight(keeping: selectedNoteID)
+                    if reconcileSearchChanges {
+                        reconcileHighlight(keeping: selectedNoteID)
+                    }
                 }
 
             Table(displayedNotes, selection: tableSelection, sortOrder: $sortOrder) {
@@ -185,6 +189,9 @@ struct SidebarView: View {
     }
 
     private func beginInlineEdit(_ target: ResultsInlineEdit, at index: Int) {
+        if let current = inlineEdit, current != target {
+            commitInlineEdit()
+        }
         onSelectIndex(index)
         if inlineEdit != target {
             inlineEdit = target
@@ -289,6 +296,8 @@ struct SidebarView: View {
         }
 
         let newID = displayedNotes[highlightedIndex].note.fileURL
+        // A cleared selection (⌘D) must not immediately reselect the highlighted row.
+        guard let preferredID else { return }
         if newID != previousID || newID != preferredID {
             onHighlightIndex(highlightedIndex)
         }

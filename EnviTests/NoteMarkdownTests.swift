@@ -46,6 +46,53 @@ final class NoteMarkdownTests: XCTestCase {
         XCTAssertEqual(parsed.body, body)
     }
 
+    func testPreservesUnknownFrontmatterAndMultilineTags() {
+        let raw = """
+        ---
+        title: Hello
+        tags:
+          - work
+          - ideas
+        date: 2020-01-01
+        ---
+        Body line
+        """
+        let parsed = NoteMarkdown.parse(raw)
+        XCTAssertEqual(parsed.tags, ["work", "ideas"])
+        XCTAssertEqual(parsed.body, "Body line")
+        let saved = NoteMarkdown.serialize(
+            tags: parsed.tags,
+            body: parsed.body,
+            frontmatter: parsed.frontmatter
+        )
+        XCTAssertTrue(saved.contains("title: Hello"))
+        XCTAssertTrue(saved.contains("date: 2020-01-01"))
+        XCTAssertTrue(saved.contains("tags: work, ideas"))
+        let again = NoteMarkdown.parse(saved)
+        XCTAssertEqual(again.tags, parsed.tags)
+        XCTAssertEqual(again.body, parsed.body)
+        XCTAssertTrue(again.frontmatter.contains(.line("title: Hello")))
+        XCTAssertTrue(again.frontmatter.contains(.line("date: 2020-01-01")))
+    }
+
+    func testEmptyTagsKeepOtherFrontmatterKeys() {
+        let raw = """
+        ---
+        title: Hello
+        tags: work
+        ---
+        Body
+        """
+        let parsed = NoteMarkdown.parse(raw)
+        let saved = NoteMarkdown.serialize(tags: [], body: parsed.body, frontmatter: parsed.frontmatter)
+        XCTAssertTrue(saved.contains("title: Hello"))
+        XCTAssertTrue(saved.contains("tags:"))
+        let again = NoteMarkdown.parse(saved)
+        XCTAssertEqual(again.tags, [])
+        XCTAssertEqual(again.body, "Body")
+        XCTAssertTrue(again.frontmatter.contains(.line("title: Hello")))
+    }
+
     func testNormalizeTagsDedupesCaseInsensitively() {
         XCTAssertEqual(
             NoteMarkdown.normalizeTags(["A", "a", "", " B "]),

@@ -389,6 +389,10 @@ struct VimEngine {
                 var col: Int? = 0
                 endCursor = buffer.moveDown(cursor, count: count - 1, preferredColumn: &col)
             }
+            if op == .change {
+                let range = buffer.lineContentsRange(from: cursor, to: endCursor)
+                return applyOperator(op, range: range, linewise: true, buffer: buffer)
+            }
             let range = buffer.linewiseRange(from: cursor, to: endCursor)
             return applyOperator(op, range: range, linewise: true, buffer: buffer)
         }
@@ -403,7 +407,6 @@ struct VimEngine {
             motionDest = buffer.moveLeft(cursor, count: count)
         case "l":
             motionDest = buffer.moveRight(cursor, count: count)
-            inclusive = true
         case "j":
             var col: Int? = preferredColumn ?? buffer.column(of: cursor)
             let dest = buffer.moveDown(cursor, count: count, preferredColumn: &col)
@@ -544,6 +547,7 @@ struct VimEngine {
                 awaitingSecondG = false
                 if ch == "g" {
                     let lineTarget = countBuffer > 0 ? max(countBuffer, 1) : 1
+                    countBuffer = 0
                     return updateVisualSelection(
                         to: indexOfLine(lineTarget, in: buffer),
                         anchor: anchor,
@@ -551,6 +555,7 @@ struct VimEngine {
                         resetColumn: true
                     )
                 }
+                countBuffer = 0
                 return [.beep]
             }
 
@@ -564,7 +569,10 @@ struct VimEngine {
 
             let explicitCount = countBuffer
             let count = max(countBuffer, 1)
-            countBuffer = 0
+            // Keep the count across the first `g` so visual `5gg` still jumps to line 5.
+            if ch != "g" {
+                countBuffer = 0
+            }
 
             switch ch {
             case "h":
@@ -645,8 +653,11 @@ struct VimEngine {
                 return [.delete(range, yank: true, linewise: linewise), .setMode(.normal)]
 
             case "c", "s":
-                let range = currentVisualRange(anchor: anchor, cursor: cursor, buffer: buffer)
+                var range = currentVisualRange(anchor: anchor, cursor: cursor, buffer: buffer)
                 let linewise = mode == .visualLine
+                if linewise {
+                    range = buffer.withoutTrailingLineBreak(range)
+                }
                 mode = .insert
                 visualAnchor = nil
                 clearPending()
@@ -746,11 +757,13 @@ struct VimEngine {
     ) -> NSRange {
         guard buffer.length > 0 else { return NSRange(location: 0, length: 0) }
         if backward {
-            let start = max(0, cursor - count)
-            return NSRange(location: start, length: cursor - start)
+            let origin = buffer.composedLocation(at: cursor)
+            let start = buffer.moveLeft(origin, count: count)
+            return NSRange(location: start, length: max(0, origin - start))
         }
-        let end = min(buffer.length, cursor + count)
-        return NSRange(location: cursor, length: end - cursor)
+        let origin = buffer.composedLocation(at: cursor)
+        let end = buffer.indexAfterDeletingForward(from: origin, count: count)
+        return NSRange(location: origin, length: max(0, end - origin))
     }
 
     private func indexOfLine(_ oneBased: Int, in buffer: VimBuffer) -> Int {

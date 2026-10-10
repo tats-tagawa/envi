@@ -31,10 +31,15 @@ struct VimBuffer {
         var i = range.location
         let end = NSMaxRange(range)
         while i < end {
-            let c = text.character(at: i)
-            if c == 0x0A || c == 0x0D { break }
-            if !isBlank(c) { return i }
-            i += 1
+            let composed = text.rangeOfComposedCharacterSequence(at: i)
+            let piece = text.substring(with: composed)
+            if piece.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) { break }
+            if !piece.unicodeScalars.allSatisfy({ isBlankScalar($0) }) {
+                return composed.location
+            }
+            let next = NSMaxRange(composed)
+            if next <= i { break }
+            i = next
         }
         return range.location
     }
@@ -52,7 +57,7 @@ struct VimBuffer {
             }
         }
         if end > range.location {
-            return end - 1
+            return text.rangeOfComposedCharacterSequence(at: end - 1).location
         }
         return range.location
     }
@@ -64,13 +69,43 @@ struct VimBuffer {
     // MARK: - Character motion
 
     func moveLeft(_ cursor: Int, count: Int = 1) -> Int {
-        max(0, cursor - max(count, 1))
+        guard length > 0 else { return 0 }
+        var index = clampCursor(cursor)
+        for _ in 0..<max(count, 1) {
+            if index <= 0 { break }
+            index = text.rangeOfComposedCharacterSequence(at: index - 1).location
+        }
+        return index
     }
 
     func moveRight(_ cursor: Int, count: Int = 1) -> Int {
         guard length > 0 else { return 0 }
-        let maxCursor = length - 1
-        return min(maxCursor, cursor + max(count, 1))
+        var index = clampCursor(cursor)
+        for _ in 0..<max(count, 1) {
+            let next = NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
+            if next >= length { break }
+            index = next
+        }
+        return index
+    }
+
+    func composedLocation(at index: Int) -> Int {
+        guard length > 0 else { return 0 }
+        let i = min(max(index, 0), length - 1)
+        return text.rangeOfComposedCharacterSequence(at: i).location
+    }
+
+    /// End index after deleting `count` composed characters starting at `cursor`.
+    func indexAfterDeletingForward(from cursor: Int, count: Int) -> Int {
+        guard length > 0 else { return 0 }
+        var index = composedLocation(at: cursor)
+        var end = index
+        for _ in 0..<max(count, 1) {
+            if index >= length { break }
+            end = NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
+            index = end
+        }
+        return end
     }
 
     func moveUp(_ cursor: Int, count: Int = 1, preferredColumn: inout Int?) -> Int {
@@ -162,6 +197,24 @@ struct VimBuffer {
         return NSRange(location: loc, length: maxEnd - loc)
     }
 
+    /// Same lines as `linewiseRange`, but the final newline stays so `cc` leaves a blank line.
+    func lineContentsRange(from start: Int, to end: Int) -> NSRange {
+        withoutTrailingLineBreak(linewiseRange(from: start, to: end))
+    }
+
+    func withoutTrailingLineBreak(_ range: NSRange) -> NSRange {
+        var range = clampRange(range)
+        while range.length > 0 {
+            let last = text.character(at: range.location + range.length - 1)
+            if last == 0x0A || last == 0x0D {
+                range.length -= 1
+            } else {
+                break
+            }
+        }
+        return range
+    }
+
     func substring(in range: NSRange) -> String {
         let clamped = clampRange(range)
         guard clamped.length > 0 else { return "" }
@@ -188,15 +241,26 @@ struct VimBuffer {
 
     func normalSelection(at cursor: Int) -> NSRange {
         guard length > 0 else { return NSRange(location: 0, length: 0) }
-        let c = clampCursor(cursor)
-        return NSRange(location: c, length: 1)
+        return text.rangeOfComposedCharacterSequence(at: clampCursor(cursor))
     }
 
     private func indexOnLine(containing index: Int, column: Int) -> Int {
         let start = lineStart(containing: index)
         let end = lineEnd(containing: index)
         if end < start { return start }
-        return min(start + column, end)
+        let target = min(start + max(column, 0), end)
+        if target >= length { return min(end, length - 1) }
+        return text.rangeOfComposedCharacterSequence(at: target).location
+    }
+
+    private func nextIndex(after index: Int) -> Int {
+        guard index < length else { return length }
+        return NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
+    }
+
+    private func previousIndex(before index: Int) -> Int {
+        guard index > 0 else { return 0 }
+        return text.rangeOfComposedCharacterSequence(at: index - 1).location
     }
 
     private func nextWordStart(from index: Int) -> Int {
@@ -208,12 +272,12 @@ struct VimBuffer {
         // Leave current word / punctuation run.
         if kind != .blank {
             while i < length, charKind(at: i) == kind {
-                i += 1
+                i = nextIndex(after: i)
             }
         }
         // Skip blanks.
         while i < length, charKind(at: i) == .blank {
-            i += 1
+            i = nextIndex(after: i)
         }
         if i >= length {
             return clampCursor(length - 1)
@@ -227,13 +291,13 @@ struct VimBuffer {
         if i == 0 { return 0 }
 
         // Step back off current position.
-        i = max(0, i - 1)
+        i = previousIndex(before: i)
         while i > 0, charKind(at: i) == .blank {
-            i -= 1
+            i = previousIndex(before: i)
         }
         let kind = charKind(at: i)
-        while i > 0, charKind(at: i - 1) == kind {
-            i -= 1
+        while i > 0, charKind(at: previousIndex(before: i)) == kind {
+            i = previousIndex(before: i)
         }
         return i
     }
@@ -243,24 +307,26 @@ struct VimBuffer {
         var i = clampIndex(index)
 
         // If not at end of a word, move into / across blanks first.
-        if i < length - 1 {
-            let atEndOfWord = charKind(at: i) != .blank
-                && (i + 1 >= length || charKind(at: i + 1) != charKind(at: i))
+        let next = nextIndex(after: i)
+        if next < length {
+            let atEndOfWord = charKind(at: i) != .blank && charKind(at: next) != charKind(at: i)
             if atEndOfWord {
-                i += 1
+                i = next
             }
         }
 
         while i < length, charKind(at: i) == .blank {
-            i += 1
+            i = nextIndex(after: i)
         }
         if i >= length {
             return clampCursor(length - 1)
         }
 
         let kind = charKind(at: i)
-        while i + 1 < length, charKind(at: i + 1) == kind {
-            i += 1
+        while true {
+            let following = nextIndex(after: i)
+            if following >= length || charKind(at: following) != kind { break }
+            i = following
         }
         return i
     }
@@ -273,19 +339,16 @@ struct VimBuffer {
 
     private func charKind(at index: Int) -> CharKind {
         guard index >= 0, index < length else { return .blank }
-        let c = text.character(at: index)
-        if isBlank(c) { return .blank }
-        if isWordChar(c) { return .word }
+        let range = text.rangeOfComposedCharacterSequence(at: index)
+        let piece = text.substring(with: range)
+        if piece.unicodeScalars.allSatisfy({ isBlankScalar($0) }) { return .blank }
+        if piece.unicodeScalars.contains(where: { CharacterSet.alphanumerics.contains($0) || $0 == "_" }) {
+            return .word
+        }
         return .punct
     }
 
-    private func isBlank(_ c: unichar) -> Bool {
-        c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D
-    }
-
-    private func isWordChar(_ c: unichar) -> Bool {
-        let scalars = String(UnicodeScalar(c)!).unicodeScalars
-        guard let s = scalars.first else { return false }
-        return CharacterSet.alphanumerics.contains(s) || s == "_"
+    private func isBlankScalar(_ scalar: UnicodeScalar) -> Bool {
+        scalar == " " || scalar == "\t" || scalar == "\n" || scalar == "\r"
     }
 }

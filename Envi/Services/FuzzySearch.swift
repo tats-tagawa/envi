@@ -139,10 +139,12 @@ enum FuzzySearch {
             let span = last + 1
             score += max(0, 40 - (span - q.count))
             // Prefer tighter covers of shorter strings (query "test" → "test" > "testing").
+            // Clamp so a real match in a long note cannot fall below "matched".
+            // Length is only a tie-break; rank already prefers shorter titles.
             score -= max(0, t.count - q.count) * 3
         }
 
-        return score
+        return max(score, 0)
     }
 
     /// Extra weight so an exact or prefix title match beats longer fuzzy title hits.

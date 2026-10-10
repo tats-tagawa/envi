@@ -93,8 +93,14 @@ enum VimTextEditing {
             applyInsertCursor(textView, at: line.location)
         } else {
             let insertAt = NSMaxRange(line)
+            let ns = textView.string as NSString
+            let charBefore: unichar = insertAt > line.location ? ns.character(at: insertAt - 1) : 0
+            let lineHasBreak = charBefore == 0x0A || charBefore == 0x0D
             insert(textView, string: "\n", at: insertAt)
-            applyInsertCursor(textView, at: insertAt + 1)
+            // A line that already ended in a newline inserts the blank line at `insertAt`.
+            // A line with no break appends the newline, so the caret belongs after it.
+            let caret = lineHasBreak ? insertAt : insertAt + 1
+            applyInsertCursor(textView, at: caret)
         }
     }
 

@@ -6,13 +6,16 @@ final class FocusAwareTextView: NSTextView {
     var onBecomeFirstResponder: (() -> Void)?
     var vimEnabled = false {
         didSet {
-            if vimEnabled != oldValue {
-                if vimEnabled {
-                    // Newly enabled while focused: start in Insert so typing still works.
-                    if window?.firstResponder === self {
-                        enterInsertAtCaret()
-                    }
+            guard vimEnabled != oldValue else { return }
+            if vimEnabled {
+                // Newly enabled while focused: start in Insert so typing still works.
+                if window?.firstResponder === self {
+                    enterInsertAtCaret()
                 }
+            } else {
+                // The block caret is a real selection. Leave a caret so the next key inserts.
+                let loc = selectedRange().location
+                setSelectedRange(NSRange(location: loc, length: 0))
             }
         }
     }
@@ -89,6 +92,7 @@ final class FocusAwareTextView: NSTextView {
 
         let buffer = VimBuffer(string)
         let selection = selectedRange()
+        let preservedOverride = vimCursorOverride
         let cursor = vimCursorOverride
             ?? VimTextEditing.normalCursor(from: selection, buffer: buffer)
         vimCursorOverride = nil
@@ -102,6 +106,8 @@ final class FocusAwareTextView: NSTextView {
         )
 
         if actions.isEmpty {
+            // Digits and the first `g` do not move. Keep the visual cursor for the next key.
+            vimCursorOverride = preservedOverride
             if vimEngine.shouldForwardInsertKeys {
                 super.keyDown(with: event)
             }
@@ -257,6 +263,9 @@ struct NoteBodyTextView: NSViewRepresentable {
     @Binding var text: String
     var isFocused: Bool
     var vimEnabled: Bool
+    /// When this equals `noteID`, a URL change is a rename: keep the caret and Vim mode.
+    var preserveCaretForURL: URL?
+    var onConsumedCaretPreserve: () -> Void = {}
     @Binding var vimMode: VimMode
     @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     var onBecameFirstResponder: () -> Void
@@ -329,7 +338,16 @@ struct NoteBodyTextView: NSViewRepresentable {
         }
 
         let noteChanged = context.coordinator.noteID != noteID
+        let keepCaret = noteChanged && noteID != nil && noteID == preserveCaretForURL
         context.coordinator.noteID = noteID
+        if keepCaret {
+            let carriedURL = noteID
+            DispatchQueue.main.async {
+                if preserveCaretForURL == carriedURL {
+                    onConsumedCaretPreserve()
+                }
+            }
+        }
 
         if textView.string != text {
             // While typing, NSTextView is source of truth. A store-driven re-render can
@@ -339,7 +357,7 @@ struct NoteBodyTextView: NSViewRepresentable {
             if noteChanged || !isEditing {
                 let selected = textView.selectedRange()
                 textView.string = text
-                if noteChanged {
+                if noteChanged, !keepCaret {
                     // Selection from the previous note is meaningless.
                     let end = (text as NSString).length
                     textView.setSelectedRange(NSRange(location: end, length: 0))
@@ -353,7 +371,7 @@ struct NoteBodyTextView: NSViewRepresentable {
                     textView.setSelectedRange(NSRange(location: location, length: length))
                 }
             }
-        } else if noteChanged, vimEnabled {
+        } else if noteChanged, vimEnabled, !keepCaret {
             textView.prepareVimInsertAtEnd()
         }
 

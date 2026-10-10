@@ -12,6 +12,8 @@ struct NoteEditorView: View {
     @State private var bodyText = ""
     /// Tracks which note the local buffers belong to (avoids cross-note bleed).
     @State private var editingNoteID: URL?
+    /// File URL produced by the rename in progress. The body keeps its caret across that change.
+    @State private var preserveCaretForURL: URL?
 
     var body: some View {
         Group {
@@ -36,6 +38,8 @@ struct NoteEditorView: View {
                         text: $bodyText,
                         isFocused: editorFocus.wrappedValue == .body,
                         vimEnabled: vimEnabled,
+                        preserveCaretForURL: preserveCaretForURL,
+                        onConsumedCaretPreserve: { preserveCaretForURL = nil },
                         vimMode: $vimMode,
                         onBecameFirstResponder: {
                             if editorFocus.wrappedValue != .body {
@@ -111,6 +115,9 @@ struct NoteEditorView: View {
     private func commitTitle(for noteID: URL) {
         let trimmed = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let outcome = store.updateTitle(trimmed, for: noteID)
+        if outcome != .unchanged, let selected = store.selectedNote {
+            preserveCaretForURL = selected.fileURL
+        }
         onRenameOutcome(outcome)
         if let selected = store.selectedNote {
             editingNoteID = selected.fileURL
