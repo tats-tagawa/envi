@@ -153,11 +153,11 @@ struct ContentView: View {
             case .stacked:
                 VSplitView {
                     notesPane
-                        .frame(minHeight: 160)
+                        .frame(minHeight: 140, idealHeight: 200)
                         .frame(maxWidth: .infinity)
 
                     editorPane
-                        .frame(minHeight: 200)
+                        .frame(minHeight: 240)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -187,7 +187,8 @@ struct ContentView: View {
             onCommitTitle: commitListTitle,
             onCommitTags: commitListTags,
             onBeginDelete: beginDelete(at:),
-            reconcileSearchChanges: !isSettingSearchProgrammatically
+            reconcileSearchChanges: !isSettingSearchProgrammatically,
+            emphasizeSelection: editorFocus == .search || editorFocus == nil
         )
     }
 
@@ -198,8 +199,7 @@ struct ContentView: View {
                 note: store.selectedNote,
                 editorFocus: $editorFocus,
                 vimEnabled: vimModeEnabled,
-                vimMode: $vimMode,
-                onRenameOutcome: handleRenameOutcome
+                vimMode: $vimMode
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -207,6 +207,7 @@ struct ContentView: View {
                 StatusBarView(vimMode: vimMode)
             }
         }
+        .background(Color(nsColor: .textBackgroundColor))
     }
 
     // MARK: - Search / title field (NV model)

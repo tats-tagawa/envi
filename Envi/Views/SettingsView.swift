@@ -6,7 +6,7 @@ struct SettingsView: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
     @AppStorage("vimModeEnabled") private var vimModeEnabled = false
     @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
-    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.yearMonthDay.rawValue
+    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.monthDayYear.rawValue
     @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
     @AppStorage(HotKeyDefaults.enabledKey) private var hotKeyEnabled = false
     @AppStorage(HotKeyDefaults.keyCodeKey) private var hotKeyCode = Int(HotKeyDefaults.defaultKeyCode)
@@ -51,7 +51,7 @@ struct SettingsView: View {
 
                 Toggle("24-hour time", isOn: $use24Hour)
 
-                Text("Recent notes show relative time (within 6 hours), or Today / Yesterday with the time.")
+                Text("Recent notes show relative time (within 6 hours), or Today / Yesterday. Older notes use a short medium date; hover for the full timestamp.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

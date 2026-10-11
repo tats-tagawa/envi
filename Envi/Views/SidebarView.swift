@@ -30,14 +30,22 @@ struct SidebarView: View {
     var onBeginDelete: (Int) -> Void
     /// False while ContentView is writing the search field itself (⌘D, selection title).
     var reconcileSearchChanges: Bool = true
+    /// Stronger selected-row emphasis while the search/list is key; quieter while writing.
+    var emphasizeSelection: Bool = true
 
     @State private var editDraft = ""
     @FocusState private var inlineFieldFocused: Bool
-    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.yearMonthDay.rawValue
+    @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.monthDayYear.rawValue
     @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
 
     private var resolvedDateOrder: ModifiedDateOrder {
-        ModifiedDateOrder(rawValue: dateOrder) ?? .yearMonthDay
+        ModifiedDateOrder(rawValue: dateOrder) ?? .monthDayYear
+    }
+
+    /// Hide Tags until a note has tags, or while editing tags (⌘⇧T).
+    private var showsTagsColumn: Bool {
+        if case .tags = inlineEdit { return true }
+        return displayedNotes.contains { !$0.tagsDisplay.isEmpty }
     }
 
     private var tableSelection: Binding<Set<RankedNote.ID>> {
@@ -59,7 +67,8 @@ struct SidebarView: View {
             TextField("Search or create…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .focused(editorFocus, equals: .search)
-                .padding(8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
                 .onKeyPress { keyPress in
                     handleKey(keyPress)
                 }
@@ -70,40 +79,26 @@ struct SidebarView: View {
                     }
                 }
 
-            Table(displayedNotes, selection: tableSelection, sortOrder: $sortOrder) {
-                TableColumn("Title", value: \.note.title) { ranked in
-                    titleCell(for: ranked)
-                }
-                .width(min: 120, ideal: 180)
+            ZStack {
+                notesTable
+                    .tableStyle(.bordered)
+                    .alternatingRowBackgrounds(.enabled)
+                    .contextMenu(forSelectionType: RankedNote.ID.self) { ids in
+                        if let id = ids.first,
+                           let index = displayedNotes.firstIndex(where: { $0.id == id }) {
+                            Button("Rename") { beginInlineEdit(.title(id), at: index) }
+                            Button("Edit Tags…") { beginInlineEdit(.tags(id), at: index) }
+                            Divider()
+                            Button("Move to Trash", role: .destructive) { onBeginDelete(index) }
+                        }
+                    }
 
-                TableColumn("Date Modified", value: \.note.updatedAt) { ranked in
-                    Text(
-                        ModifiedDateFormat.string(
-                            for: ranked.note.updatedAt,
-                            order: resolvedDateOrder,
-                            use24Hour: use24Hour
-                        )
-                    )
-                        .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .width(min: 120, ideal: 160)
-
-                TableColumn("Tags", value: \.tagsDisplay) { ranked in
-                    tagsCell(for: ranked)
-                }
-                .width(min: 80, ideal: 120)
-            }
-            .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .contextMenu(forSelectionType: RankedNote.ID.self) { ids in
-                if let id = ids.first,
-                   let index = displayedNotes.firstIndex(where: { $0.id == id }) {
-                    Button("Rename") { beginInlineEdit(.title(id), at: index) }
-                    Button("Edit Tags…") { beginInlineEdit(.tags(id), at: index) }
-                    Divider()
-                    Button("Move to Trash", role: .destructive) { onBeginDelete(index) }
+                if displayedNotes.isEmpty {
+                    Text("Type to search or create")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .allowsHitTesting(false)
                 }
             }
             .onChange(of: displayedNotes.count) { _, _ in
@@ -140,13 +135,72 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
+    private var notesTable: some View {
+        if showsTagsColumn {
+            Table(displayedNotes, selection: tableSelection, sortOrder: $sortOrder) {
+                TableColumn("Title", value: \.note.title) { ranked in
+                    titleCell(for: ranked)
+                }
+                .width(min: 120, ideal: 180)
+
+                TableColumn("Date Modified", value: \.note.updatedAt) { ranked in
+                    dateCell(for: ranked)
+                }
+                .width(min: 100, ideal: 130)
+
+                TableColumn("Tags", value: \.tagsDisplay) { ranked in
+                    tagsCell(for: ranked)
+                }
+                .width(min: 60, ideal: 100)
+            }
+        } else {
+            Table(displayedNotes, selection: tableSelection, sortOrder: $sortOrder) {
+                TableColumn("Title", value: \.note.title) { ranked in
+                    titleCell(for: ranked)
+                }
+                .width(min: 120, ideal: 180)
+
+                TableColumn("Date Modified", value: \.note.updatedAt) { ranked in
+                    dateCell(for: ranked)
+                }
+                .width(min: 100, ideal: 130)
+            }
+        }
+    }
+
+    private func dateCell(for ranked: RankedNote) -> some View {
+        let label = ModifiedDateFormat.string(
+            for: ranked.note.updatedAt,
+            order: resolvedDateOrder,
+            use24Hour: use24Hour
+        )
+        let tip = ModifiedDateFormat.tooltip(
+            for: ranked.note.updatedAt,
+            order: resolvedDateOrder,
+            use24Hour: use24Hour
+        )
+        return Text(label)
+            .font(.callout)
+            .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+            .lineLimit(1)
+            .help(tip)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
     private func titleCell(for ranked: RankedNote) -> some View {
         if case .title(let id) = inlineEdit, id == ranked.id {
             inlineEditor(placeholder: "Title")
         } else {
+            let isSelected = ranked.note.fileURL == selectedNoteID
             Text(ranked.note.title)
-                .font(.body.weight(ranked.note.fileURL == selectedNoteID ? .semibold : .regular))
-                .foregroundStyle(ranked.matchesQuery ? Color.primary : Color.secondary)
+                .font(.callout.weight(isSelected && emphasizeSelection ? .semibold : .regular))
+                .foregroundStyle(
+                    ranked.matchesQuery
+                        ? (isSelected ? Color.primary : Color.primary.opacity(emphasizeSelection ? 1 : 0.9))
+                        : Color.secondary
+                )
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -163,6 +217,7 @@ struct SidebarView: View {
             inlineEditor(placeholder: "Tags")
         } else {
             Text(ranked.tagsDisplay.isEmpty ? " " : ranked.tagsDisplay)
+                .font(.callout)
                 .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
