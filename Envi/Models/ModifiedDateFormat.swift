@@ -1,15 +1,15 @@
 import Foundation
 
 enum ModifiedDateOrder: String, CaseIterable, Identifiable {
-    case yearMonthDay
     case monthDayYear
+    case yearMonthDay
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .yearMonthDay: "yyyy-MM-dd"
-        case .monthDayYear: "MM-dd-yyyy"
+        case .monthDayYear: "Oct 4, 2026"
+        case .yearMonthDay: "2026 Oct 4"
         }
     }
 
@@ -20,13 +20,13 @@ enum ModifiedDateFormat {
     static let use24HourKey = "modifiedDateUse24Hour"
 
     /// Formats a note's modified date for the list column.
-    /// - Within 6 hours: relative ("4 hours 4 minutes ago")
+    /// - Within 6 hours: relative ("Just now", "4 minutes ago")
     /// - Today / Yesterday: labeled day + time
-    /// - Older: absolute date + time
+    /// - Older: medium date + time (`Oct 4` / `Oct 4, 2026`)
     static func string(
         for date: Date,
         now: Date = .now,
-        order: ModifiedDateOrder = .yearMonthDay,
+        order: ModifiedDateOrder = .monthDayYear,
         use24Hour: Bool = false,
         calendar: Calendar = .current
     ) -> String {
@@ -35,7 +35,8 @@ enum ModifiedDateFormat {
             return relativeString(age: age)
         }
 
-        let time = timeString(date, use24Hour: use24Hour)
+        let timeZone = calendar.timeZone
+        let time = timeString(date, use24Hour: use24Hour, timeZone: timeZone)
         if calendar.isDateInToday(date) {
             return "Today \(time)"
         }
@@ -43,7 +44,26 @@ enum ModifiedDateFormat {
             return "Yesterday \(time)"
         }
 
-        return "\(dateString(date, order: order)) \(time)"
+        return "\(dateString(date, order: order, now: now, calendar: calendar)) \(time)"
+    }
+
+    /// Full absolute timestamp for tooltips.
+    static func tooltip(
+        for date: Date,
+        order: ModifiedDateOrder = .monthDayYear,
+        use24Hour: Bool = false,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        switch order {
+        case .monthDayYear:
+            formatter.dateFormat = use24Hour ? "MMM d, yyyy HH:mm" : "MMM d, yyyy h:mm a"
+        case .yearMonthDay:
+            formatter.dateFormat = use24Hour ? "yyyy MMM d HH:mm" : "yyyy MMM d h:mm a"
+        }
+        return formatter.string(from: date)
     }
 
     private static func relativeString(age: TimeInterval) -> String {
@@ -56,29 +76,43 @@ enum ModifiedDateFormat {
         if hours == 0 {
             return minutes == 1 ? "1 minute ago" : "\(minutes) minutes ago"
         }
-        let hourPart = hours == 1 ? "1 hour" : "\(hours) hours"
+        // Prefer a short relative form once past the hour mark.
+        if hours == 1, minutes == 0 {
+            return "1 hour ago"
+        }
         if minutes == 0 {
-            return "\(hourPart) ago"
+            return "\(hours) hours ago"
+        }
+        if hours == 1 {
+            return minutes == 1 ? "1 hour 1 minute ago" : "1 hour \(minutes) minutes ago"
         }
         let minutePart = minutes == 1 ? "1 minute" : "\(minutes) minutes"
-        return "\(hourPart) \(minutePart) ago"
+        return "\(hours) hours \(minutePart) ago"
     }
 
-    private static func dateString(_ date: Date, order: ModifiedDateOrder) -> String {
+    private static func dateString(
+        _ date: Date,
+        order: ModifiedDateOrder,
+        now: Date,
+        calendar: Calendar
+    ) -> String {
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
         switch order {
-        case .yearMonthDay:
-            formatter.dateFormat = "yyyy-MM-dd"
         case .monthDayYear:
-            formatter.dateFormat = "MM-dd-yyyy"
+            formatter.dateFormat = sameYear ? "MMM d" : "MMM d, yyyy"
+        case .yearMonthDay:
+            formatter.dateFormat = sameYear ? "MMM d" : "yyyy MMM d"
         }
         return formatter.string(from: date)
     }
 
-    private static func timeString(_ date: Date, use24Hour: Bool) -> String {
+    private static func timeString(_ date: Date, use24Hour: Bool, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
         formatter.dateFormat = use24Hour ? "HH:mm" : "h:mm a"
         return formatter.string(from: date)
     }

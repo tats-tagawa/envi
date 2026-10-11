@@ -3,7 +3,6 @@ import Foundation
 /// Where keyboard focus sits in the main window.
 enum EditorFocusTarget: Hashable {
     case search
-    case title
     case body
 }
 

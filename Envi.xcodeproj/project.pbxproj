@@ -36,6 +36,7 @@
 		B10000000000000000000003 /* VimEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* VimEngineTests.swift */; };
 		B10000000000000000000004 /* NotesFolderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* NotesFolderStoreTests.swift */; };
 		B10000000000000000000005 /* Envi.app in Frameworks */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* envi.app */; };
+		B10000000000000000000006 /* ModifiedDateFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* ModifiedDateFormatTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +71,7 @@
 		B20000000000000000000002 /* FuzzySearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzySearchTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000003 /* VimEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VimEngineTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* NotesFolderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesFolderStoreTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000006 /* ModifiedDateFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModifiedDateFormatTests.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* EnviTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EnviTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -134,6 +136,7 @@
 				B20000000000000000000002 /* FuzzySearchTests.swift */,
 				B20000000000000000000003 /* VimEngineTests.swift */,
 				B20000000000000000000004 /* NotesFolderStoreTests.swift */,
+				B20000000000000000000006 /* ModifiedDateFormatTests.swift */,
 			);
 			path = EnviTests;
 			sourceTree = "<group>";
@@ -373,6 +376,7 @@
 				B10000000000000000000002 /* FuzzySearchTests.swift in Sources */,
 				B10000000000000000000003 /* VimEngineTests.swift in Sources */,
 				B10000000000000000000004 /* NotesFolderStoreTests.swift in Sources */,
+				B10000000000000000000006 /* ModifiedDateFormatTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

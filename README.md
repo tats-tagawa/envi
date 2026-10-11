@@ -30,7 +30,7 @@ xcodebuild -scheme Envi -destination 'platform=macOS' test
 2. Type in the search field to filter notes (title, body, and tags). Selecting a note puts its title in the search field (⌘D restores the previous search).
 3. **Return** opens the highlighted match or creates a note when nothing matches (the new title stays in the search field). **Escape** clears the search.
 4. **⌘L** focuses search · **⌘J/⌘K** and (in the search field) **⌃J/⌃K**, **⌃N/⌃P**, and **↑/↓** move the highlight · **⌘R** or double-click a title to rename inline · **⌘⇧T** or double-click Tags to edit tags inline · **⌘⌫** or the context menu moves a note to the Trash.
-5. The notes list shows **Title**, **Date Modified**, and **Tags**. The note pane has a compact editable title and the body. Tags appear only in the list. They are stored as a `tags:` frontmatter line (a comma-separated list or a YAML list). Other frontmatter keys are kept when the note is saved.
+5. The notes list shows **Title**, **Date Modified**, and **Tags** (Tags appears once any note has tags, or while editing with ⌘⇧T). Selecting a note puts its title in the search field — rename with ⌘R. The note pane is the body only. Tags are stored as a `tags:` frontmatter line (a comma-separated list or a YAML list). Other frontmatter keys are kept when the note is saved.
 6. Optional global bring-to-front hotkey: **Settings → Activation**.
 
 ### Vim mode

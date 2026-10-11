@@ -289,7 +289,7 @@ struct NoteBodyTextView: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.font = NSFont.preferredFont(forTextStyle: .body)
-        textView.textContainerInset = NSSize(width: 4, height: 8)
+        textView.textContainerInset = NSSize(width: 2, height: 4)
         textView.drawsBackground = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isVerticallyResizable = true
