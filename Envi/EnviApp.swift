@@ -1,13 +1,32 @@
+import AppKit
 import SwiftUI
 
 @main
 struct EnviApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = NotesFolderStore()
+    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system.rawValue
+    /// Bumped when macOS Light/Dark changes so System mode re-resolves.
+    @State private var systemAppearanceRevision = 0
+    @State private var isObservingSystemTheme = false
+
+    private var resolvedAppearance: AppearanceMode {
+        AppearanceMode(rawValue: appearanceMode) ?? .system
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
+                .preferredColorScheme(resolvedAppearance.colorScheme)
+                // Force a clean rebuild when switching System/Light/Dark (and when the OS theme flips).
+                .id("\(appearanceMode)-\(systemAppearanceRevision)")
+                .onAppear {
+                    applyAppAppearance()
+                    startObservingSystemThemeIfNeeded()
+                }
+                .onChange(of: appearanceMode) { _, _ in
+                    applyAppAppearance()
+                }
         }
         .defaultSize(width: 960, height: 640)
         .commands {
@@ -60,6 +79,37 @@ struct EnviApp: App {
 
         Settings {
             SettingsView()
+                .preferredColorScheme(resolvedAppearance.colorScheme)
+                .id("settings-\(appearanceMode)-\(systemAppearanceRevision)")
+        }
+    }
+
+    private func applyAppAppearance() {
+        let appearance = resolvedAppearance.nsAppearance
+        NSApp.appearance = appearance
+        // Clear any window-level override left over from a previous Light/Dark choice.
+        for window in NSApp.windows {
+            window.appearance = appearance
+        }
+    }
+
+    private func startObservingSystemThemeIfNeeded() {
+        guard !isObservingSystemTheme else { return }
+        isObservingSystemTheme = true
+
+        DistributedNotificationCenter.default.addObserver(
+            forName: AppearanceMode.systemThemeChanged,
+            object: nil,
+            queue: .main
+        ) { _ in
+            let mode = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: AppearanceMode.storageKey) ?? "")
+                ?? .system
+            guard mode == .system else { return }
+            NSApp.appearance = nil
+            for window in NSApp.windows {
+                window.appearance = nil
+            }
+            systemAppearanceRevision += 1
         }
     }
 }

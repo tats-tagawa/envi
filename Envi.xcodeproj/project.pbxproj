@@ -21,6 +21,7 @@
 		A1000000000000000000000C /* NoteBodyTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* NoteBodyTextView.swift */; };
 		A1000000000000000000000E /* AppFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* AppFocus.swift */; };
 		A10000000000000000000010 /* LayoutMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* LayoutMode.swift */; };
+		A1000000000000000000001A /* AppearanceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* AppearanceMode.swift */; };
 		A10000000000000000000011 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* SettingsView.swift */; };
 		A10000000000000000000012 /* NoteMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* NoteMarkdown.swift */; };
 		A10000000000000000000013 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* GlobalHotKey.swift */; };
@@ -56,6 +57,7 @@
 		A2000000000000000000000E /* AppFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFocus.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		A20000000000000000000010 /* LayoutMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutMode.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* AppearanceMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceMode.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdown.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				A20000000000000000000002 /* Note.swift */,
 				A20000000000000000000012 /* NoteMarkdown.swift */,
 				A20000000000000000000010 /* LayoutMode.swift */,
+				A2000000000000000000001A /* AppearanceMode.swift */,
 				A20000000000000000000019 /* ModifiedDateFormat.swift */,
 			);
 			path = Models;
@@ -355,6 +358,7 @@
 				A1000000000000000000000C /* NoteBodyTextView.swift in Sources */,
 				A1000000000000000000000E /* AppFocus.swift in Sources */,
 				A10000000000000000000010 /* LayoutMode.swift in Sources */,
+				A1000000000000000000001A /* AppearanceMode.swift in Sources */,
 				A10000000000000000000011 /* SettingsView.swift in Sources */,
 				A10000000000000000000012 /* NoteMarkdown.swift in Sources */,
 				A10000000000000000000013 /* GlobalHotKey.swift in Sources */,

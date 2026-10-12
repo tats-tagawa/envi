@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
+    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system.rawValue
     @AppStorage("vimModeEnabled") private var vimModeEnabled = false
     @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.monthDayYear.rawValue
@@ -23,6 +24,15 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Appearance", selection: $appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+            }
+
             Section("Layout") {
                 Picker("Layout", selection: $layoutMode) {
                     ForEach(LayoutMode.allCases) { mode in

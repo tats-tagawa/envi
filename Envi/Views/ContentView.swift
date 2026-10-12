@@ -56,6 +56,14 @@ struct ContentView: View {
         LayoutMode(rawValue: layoutMode) ?? .sidebar
     }
 
+    /// Sidebar needs room for two panes; stacked can be narrower.
+    private var windowMinWidth: CGFloat {
+        switch resolvedLayoutMode {
+        case .sidebar: 720
+        case .stacked: 480
+        }
+    }
+
     var body: some View {
         Group {
             if store.hasFolder {
@@ -64,7 +72,8 @@ struct ContentView: View {
                 FolderPickerView(store: store)
             }
         }
-        .frame(minWidth: 720, minHeight: 480)
+        .frame(minWidth: windowMinWidth, minHeight: 480)
+        .background(WindowContentMinSize(minWidth: windowMinWidth, minHeight: 480))
         .alert(
             "Error",
             isPresented: Binding(
@@ -140,14 +149,13 @@ struct ContentView: View {
         Group {
             switch resolvedLayoutMode {
             case .sidebar:
-                HStack(spacing: 0) {
+                HSplitView {
                     notesPane
-                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+                        .frame(minWidth: 240, idealWidth: 380)
                         .frame(maxHeight: .infinity)
 
-                    Divider()
-
                     editorPane
+                        .frame(minWidth: 320)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .stacked:
@@ -162,6 +170,8 @@ struct ContentView: View {
                 }
             }
         }
+        // Tear down HSplitView/VSplitView so pane min-widths do not stick on the window.
+        .id(resolvedLayoutMode)
         .onAppear {
             editorFocus = .search
             syncSelectionToHighlight()
@@ -397,6 +407,25 @@ struct ContentView: View {
             adoptSearchTitle(from: selected)
             if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == selected.fileURL }) {
                 highlightedIndex = idx
+            }
+        }
+    }
+}
+
+/// Keeps `NSWindow.contentMinSize` in sync when layout mode changes.
+/// SwiftUI's `.frame(minWidth:)` alone does not always clear an HSplitView minimum.
+private struct WindowContentMinSize: NSViewRepresentable {
+    var minWidth: CGFloat
+    var minHeight: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let size = NSSize(width: minWidth, height: minHeight)
+        DispatchQueue.main.async {
+            guard let window = nsView.window else { return }
+            if window.contentMinSize != size {
+                window.contentMinSize = size
             }
         }
     }
