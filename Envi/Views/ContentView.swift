@@ -140,14 +140,13 @@ struct ContentView: View {
         Group {
             switch resolvedLayoutMode {
             case .sidebar:
-                HStack(spacing: 0) {
+                HSplitView {
                     notesPane
-                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 520)
+                        .frame(minWidth: 240, idealWidth: 380)
                         .frame(maxHeight: .infinity)
 
-                    Divider()
-
                     editorPane
+                        .frame(minWidth: 320)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .stacked:

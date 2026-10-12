@@ -72,6 +72,7 @@ The list shows **Title**, **Date Modified**, and **Tags**.
 
 ## Settings
 
+- **Appearance** — System (default), Light, or Dark.
 - **Layout** — Sidebar (default) or Stacked.
 - **Editing** — Optional Vim mode for the note body (off by default). When on, a footer shows `-- INSERT --` / `-- NORMAL --`. Optional **j/k move by wrapped lines** (on by default with Vim).
 - **Date Modified** — Date order and 24-hour time.
