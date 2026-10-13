@@ -5,27 +5,22 @@ import SwiftUI
 struct EnviApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = NotesFolderStore()
-    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system.rawValue
-    /// Bumped when macOS Light/Dark changes so System mode re-resolves.
-    @State private var systemAppearanceRevision = 0
-    @State private var isObservingSystemTheme = false
-
-    private var resolvedAppearance: AppearanceMode {
-        AppearanceMode(rawValue: appearanceMode) ?? .system
-    }
+    @State private var themeStore = ThemeStore()
+    @State private var shortcutStore = KeyboardShortcutStore()
 
     var body: some Scene {
+        // Read observable fields so menus/tint refresh without destroying the view tree.
+        let _ = shortcutStore.revision
+        let _ = themeStore.systemAppearanceRevision
+
         WindowGroup {
             ContentView(store: store)
-                .preferredColorScheme(resolvedAppearance.colorScheme)
-                // Force a clean rebuild when switching System/Light/Dark (and when the OS theme flips).
-                .id("\(appearanceMode)-\(systemAppearanceRevision)")
+                .environment(\.themeStore, themeStore)
+                .environment(\.shortcutStore, shortcutStore)
+                .preferredColorScheme(themeStore.preferredColorScheme)
+                .tint(themeStore.resolvedColors.accent.color)
                 .onAppear {
-                    applyAppAppearance()
-                    startObservingSystemThemeIfNeeded()
-                }
-                .onChange(of: appearanceMode) { _, _ in
-                    applyAppAppearance()
+                    themeStore.applyAppKitAppearance()
                 }
         }
         .defaultSize(width: 960, height: 640)
@@ -34,46 +29,46 @@ struct EnviApp: App {
                 Button("Open Notes Folder…") {
                     store.chooseFolder()
                 }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .openNotesFolder))
             }
 
             CommandMenu("Note") {
                 Button("Focus Search") {
                     NotificationCenter.default.post(name: .focusSearch, object: nil)
                 }
-                .keyboardShortcut("l", modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .focusSearch))
 
                 Button("Deselect Note") {
                     NotificationCenter.default.post(name: .deselectRestoreSearch, object: nil)
                 }
-                .keyboardShortcut("d", modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .deselectNote))
 
                 Button("Rename Note") {
                     NotificationCenter.default.post(name: .renameSelectedNote, object: nil)
                 }
-                .keyboardShortcut("r", modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .renameNote))
 
                 Button("Tag Note") {
                     NotificationCenter.default.post(name: .editTags, object: nil)
                 }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .tagNote))
 
                 Button("Delete Note") {
                     NotificationCenter.default.post(name: .deleteSelectedNote, object: nil)
                 }
-                .keyboardShortcut(.delete, modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .deleteNote))
 
                 Divider()
 
                 Button("Toggle Task") {
                     NotificationCenter.default.post(name: .toggleTaskAtCursor, object: nil)
                 }
-                .keyboardShortcut(.return, modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .toggleTask))
 
                 Button("Insert Task") {
                     NotificationCenter.default.post(name: .insertTaskAtCursor, object: nil)
                 }
-                .keyboardShortcut(.return, modifiers: [.command, .shift])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .insertTask))
 
                 Button("Set Task Priority 1") {
                     NotificationCenter.default.post(
@@ -82,7 +77,7 @@ struct EnviApp: App {
                         userInfo: [TaskPriorityUserInfo.key: 1]
                     )
                 }
-                .keyboardShortcut("1", modifiers: [.control, .command])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .setTaskPriority1))
 
                 Button("Set Task Priority 2") {
                     NotificationCenter.default.post(
@@ -91,7 +86,7 @@ struct EnviApp: App {
                         userInfo: [TaskPriorityUserInfo.key: 2]
                     )
                 }
-                .keyboardShortcut("2", modifiers: [.control, .command])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .setTaskPriority2))
 
                 Button("Set Task Priority 3") {
                     NotificationCenter.default.post(
@@ -100,7 +95,7 @@ struct EnviApp: App {
                         userInfo: [TaskPriorityUserInfo.key: 3]
                     )
                 }
-                .keyboardShortcut("3", modifiers: [.control, .command])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .setTaskPriority3))
 
                 Button("Clear Task Priority") {
                     NotificationCenter.default.post(
@@ -109,65 +104,38 @@ struct EnviApp: App {
                         userInfo: [:]
                     )
                 }
-                .keyboardShortcut("0", modifiers: [.control, .command])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .clearTaskPriority))
 
                 Button("Set Task Deadline…") {
                     NotificationCenter.default.post(name: .requestTaskDeadlineSheet, object: nil)
                 }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .setTaskDeadline))
 
                 Button("Next Note") {
                     NotificationCenter.default.post(NoteHighlightDelta.notification(delta: 1))
                 }
-                .keyboardShortcut("j", modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .nextNote))
 
                 Button("Previous Note") {
                     NotificationCenter.default.post(NoteHighlightDelta.notification(delta: -1))
                 }
-                .keyboardShortcut("k", modifiers: .command)
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .previousNote))
             }
 
             CommandMenu("View") {
                 Button("Toggle Task Mode") {
                     NotificationCenter.default.post(name: .toggleTaskMode, object: nil)
                 }
-                .keyboardShortcut("t", modifiers: [.control, .command])
+                .keyboardShortcut(shortcutStore.keyboardShortcut(for: .toggleTaskMode))
             }
         }
 
         Settings {
             SettingsView()
-                .preferredColorScheme(resolvedAppearance.colorScheme)
-                .id("settings-\(appearanceMode)-\(systemAppearanceRevision)")
-        }
-    }
-
-    private func applyAppAppearance() {
-        let appearance = resolvedAppearance.nsAppearance
-        NSApp.appearance = appearance
-        // Clear any window-level override left over from a previous Light/Dark choice.
-        for window in NSApp.windows {
-            window.appearance = appearance
-        }
-    }
-
-    private func startObservingSystemThemeIfNeeded() {
-        guard !isObservingSystemTheme else { return }
-        isObservingSystemTheme = true
-
-        DistributedNotificationCenter.default.addObserver(
-            forName: AppearanceMode.systemThemeChanged,
-            object: nil,
-            queue: .main
-        ) { _ in
-            let mode = AppearanceMode(rawValue: UserDefaults.standard.string(forKey: AppearanceMode.storageKey) ?? "")
-                ?? .system
-            guard mode == .system else { return }
-            NSApp.appearance = nil
-            for window in NSApp.windows {
-                window.appearance = nil
-            }
-            systemAppearanceRevision += 1
+                .environment(\.themeStore, themeStore)
+                .environment(\.shortcutStore, shortcutStore)
+                .preferredColorScheme(themeStore.preferredColorScheme)
+                .tint(themeStore.resolvedColors.accent.color)
         }
     }
 }

@@ -46,10 +46,10 @@ xcodebuild -scheme Envi -destination 'platform=macOS' test
 
 The list shows **Title**, **Date Modified**, and **Tags**.
 
-- **Date Modified** uses relative time for recent notes (within 6 hours), **Today** / **Yesterday** with a time, and a short medium date for older notes. Hover a date for the full timestamp. Format options live in **Settings → Date Modified**.
+- **Date Modified** uses relative time for recent notes (within 6 hours), **Today** / **Yesterday** with a time, and a short medium date for older notes. Hover a date for the full timestamp. Format options live in **Settings → General**.
 - The **Tags** column appears once any visible note has tags, or while you are editing tags (**⌘⇧T**).
 - Right-click a row for Rename, Edit Tags…, or Move to Trash.
-- Layout defaults to a sidebar list beside the editor. Switch to a stacked list-above-editor layout in **Settings → Layout**.
+- Layout defaults to a sidebar list beside the editor. Switch to a stacked list-above-editor layout in **Settings → General**.
 
 ## Tasks
 
@@ -77,6 +77,8 @@ Tasks are ordinary GitHub-flavored Markdown checkboxes in note bodies. Optional 
 
 ## Keyboard shortcuts
 
+Defaults (remap in **Settings → Keyboard Shortcuts**; Vim motions are separate):
+
 | Action | Shortcut |
 | --- | --- |
 | Focus search | ⌘L |
@@ -98,11 +100,11 @@ Tasks are ordinary GitHub-flavored Markdown checkboxes in note bodies. Optional 
 
 ## Settings
 
-- **Appearance** — System (default), Light, or Dark.
-- **Layout** — Sidebar (default) or Stacked.
-- **Editing** — Optional Vim mode for the note body (off by default). When on, a footer shows `-- INSERT --` / `-- NORMAL --`. Optional **j/k move by wrapped lines** (on by default with Vim).
-- **Date Modified** — Date order and 24-hour time.
-- **Activation** — Optional global bring-to-front hotkey. While enabled, closing the window hides envi instead of quitting so the hotkey can bring it back.
+Settings has three tabs:
+
+- **General** — Layout (sidebar / stacked), Vim editing toggles, Date Modified format, and optional global bring-to-front hotkey (closing the window hides envi while the hotkey is enabled).
+- **Color Scheme** — Theme presets (System, Default Light/Dark, Catppuccin Latte/Mocha, Monokai, Gruvbox, Solarized Light/Dark, Tokyo Night / Day, Nord, GitHub Light/Dark). Edit individual colors (window, sidebar, editor, text, accent, and more); **Reset Colors** restores the preset.
+- **Keyboard Shortcuts** — Remap menu and search shortcuts (not Vim). Change… records a new chord; Reset / Reset All restore defaults. Conflicting chords show a warning.
 
 ## Vim mode
 

@@ -36,10 +36,14 @@ struct SidebarView: View {
     /// Stronger selected-row emphasis while the search/list is key; quieter while writing.
     var emphasizeSelection: Bool = true
 
+    @Environment(\.themeStore) private var themeStore
+    @Environment(\.shortcutStore) private var shortcutStore
     @State private var editDraft = ""
     @FocusState private var inlineFieldFocused: Bool
     @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.monthDayYear.rawValue
     @AppStorage(ModifiedDateFormat.use24HourKey) private var use24Hour = false
+
+    private var theme: AppThemeColors { themeStore.resolvedColors }
 
     private var resolvedDateOrder: ModifiedDateOrder {
         ModifiedDateOrder(rawValue: dateOrder) ?? .monthDayYear
@@ -90,7 +94,17 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             TextField(searchPlaceholder, text: $searchText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundStyle(theme.textPrimary.color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(theme.searchFieldBackground.color)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(theme.separator.color, lineWidth: 1)
+                )
                 .focused(editorFocus, equals: .search)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -107,12 +121,13 @@ struct SidebarView: View {
             ZStack {
                 if isTaskMode {
                     tasksTable
-                        .tableStyle(.bordered)
-                        .alternatingRowBackgrounds(.enabled)
+                        .enviThemedTable(theme: theme)
+                        .id("tasks-table")
                 } else {
                     notesTable
-                        .tableStyle(.bordered)
-                        .alternatingRowBackgrounds(.enabled)
+                        .enviThemedTable(theme: theme)
+                        // Rebuild when column count changes — in-place column swaps can assert in AppKit.
+                        .id("notes-table-\(showsTagsColumn)")
                         .contextMenu(forSelectionType: RankedNote.ID.self) { ids in
                             if let id = ids.first,
                                let index = displayedNotes.firstIndex(where: { $0.id == id }) {
@@ -127,7 +142,7 @@ struct SidebarView: View {
                 if isTaskMode ? displayedTasks.isEmpty : displayedNotes.isEmpty {
                     Text(isTaskMode ? "Type to search or create a task" : "Type to search or create")
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.textSecondary.color)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .allowsHitTesting(false)
                 }
@@ -171,7 +186,7 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(theme.sidebarBackground.color)
     }
 
     @ViewBuilder
@@ -218,7 +233,7 @@ struct SidebarView: View {
             TableColumn("P") { ranked in
                 Text(ranked.task.priority.map { "P\($0)" } ?? " ")
                     .font(.callout.monospacedDigit())
-                    .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                    .foregroundStyle(ranked.matchesQuery ? theme.textSecondary.color : theme.textDimmed.color)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             .width(min: 28, ideal: 36)
@@ -231,7 +246,7 @@ struct SidebarView: View {
             TableColumn("Note") { ranked in
                 Text(ranked.task.noteTitle)
                     .font(.callout)
-                    .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                    .foregroundStyle(ranked.matchesQuery ? theme.textSecondary.color : theme.textDimmed.color)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
@@ -254,8 +269,8 @@ struct SidebarView: View {
             .font(.callout)
             .foregroundStyle(
                 overdue
-                    ? Color.red.opacity(ranked.matchesQuery ? 1 : 0.7)
-                    : (ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                    ? theme.danger.color.opacity(ranked.matchesQuery ? 1 : 0.7)
+                    : (ranked.matchesQuery ? theme.textSecondary.color : theme.textDimmed.color)
             )
             .lineLimit(1)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -277,18 +292,18 @@ struct SidebarView: View {
                 onToggleTask(ranked)
             } label: {
                 Image(systemName: ranked.task.isDone ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(ranked.task.isDone ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(ranked.task.isDone ? theme.checkboxOn.color : theme.textSecondary.color)
             }
             .buttonStyle(.plain)
             .help(ranked.task.isDone ? "Mark as not done" : "Mark as done")
 
             Text(ranked.task.text.isEmpty ? "Untitled" : ranked.task.text)
                 .font(.callout.weight(isSelected && emphasizeSelection ? .semibold : .regular))
-                .strikethrough(ranked.task.isDone, color: .secondary)
+                .strikethrough(ranked.task.isDone, color: theme.textSecondary.color)
                 .foregroundStyle(
                     ranked.matchesQuery
-                        ? (isSelected ? Color.primary : Color.primary.opacity(emphasizeSelection ? 1 : 0.9))
-                        : Color.secondary
+                        ? theme.textPrimary.color.opacity(isSelected && emphasizeSelection ? 1 : 0.9)
+                        : theme.textDimmed.color
                 )
                 .lineLimit(1)
         }
@@ -309,7 +324,7 @@ struct SidebarView: View {
         )
         return Text(label)
             .font(.callout)
-            .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+            .foregroundStyle(ranked.matchesQuery ? theme.textSecondary.color : theme.textDimmed.color)
             .lineLimit(1)
             .help(tip)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -326,8 +341,8 @@ struct SidebarView: View {
                 .font(.callout.weight(isSelected && emphasizeSelection ? .semibold : .regular))
                 .foregroundStyle(
                     ranked.matchesQuery
-                        ? (isSelected ? Color.primary : Color.primary.opacity(emphasizeSelection ? 1 : 0.9))
-                        : Color.secondary
+                        ? theme.textPrimary.color.opacity(isSelected && emphasizeSelection ? 1 : 0.9)
+                        : theme.textDimmed.color
                 )
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -346,7 +361,7 @@ struct SidebarView: View {
         } else {
             Text(ranked.tagsDisplay.isEmpty ? " " : ranked.tagsDisplay)
                 .font(.callout)
-                .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                .foregroundStyle(ranked.matchesQuery ? theme.textSecondary.color : theme.textDimmed.color)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -416,41 +431,26 @@ struct SidebarView: View {
     }
 
     private func handleKey(_ keyPress: KeyPress) -> KeyPress.Result {
-        if keyPress.key == .escape {
+        let binding = { (id: AppShortcutID) in shortcutStore.binding(for: id) }
+        if AppShortcutBinding.matches(binding(.searchClear), keyPress: keyPress) {
             onClearSearch()
             return .handled
         }
-        if keyPress.key == .upArrow {
+        if AppShortcutBinding.matches(binding(.searchMoveUp), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.searchCtrlK), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.searchCtrlP), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.previousNote), keyPress: keyPress) {
             onMoveHighlight(-1)
             return .handled
         }
-        if keyPress.key == .downArrow {
+        if AppShortcutBinding.matches(binding(.searchMoveDown), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.searchCtrlJ), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.searchCtrlN), keyPress: keyPress)
+            || AppShortcutBinding.matches(binding(.nextNote), keyPress: keyPress) {
             onMoveHighlight(1)
             return .handled
         }
-        if keyPress.modifiers.contains(.command) {
-            let c = String(keyPress.characters).lowercased()
-            if c == "j" {
-                onMoveHighlight(1)
-                return .handled
-            }
-            if c == "k" {
-                onMoveHighlight(-1)
-                return .handled
-            }
-        }
-        if keyPress.modifiers.contains(.control) {
-            let c = String(keyPress.characters).lowercased()
-            if c == "n" || c == "j" {
-                onMoveHighlight(1)
-                return .handled
-            }
-            if c == "p" || c == "k" {
-                onMoveHighlight(-1)
-                return .handled
-            }
-        }
-        if keyPress.key == .return {
+        if AppShortcutBinding.matches(binding(.searchActivate), keyPress: keyPress) {
             onActivateSearch()
             return .handled
         }
@@ -520,5 +520,19 @@ struct SidebarView: View {
         if newID != previousID || newID != preferredID {
             onHighlightIndex(highlightedIndex)
         }
+    }
+}
+
+// MARK: - Table theming
+
+private extension View {
+    /// Hide system table fills so the sidebar theme shows through.
+    /// Do not poke NSTableView/row views from layout — that races SwiftUI column updates and can assert.
+    func enviThemedTable(theme: AppThemeColors) -> some View {
+        self
+            .tableStyle(.inset(alternatesRowBackgrounds: false))
+            .alternatingRowBackgrounds(.disabled)
+            .scrollContentBackground(.hidden)
+            .background(theme.sidebarBackground.color)
     }
 }
