@@ -321,6 +321,30 @@ struct NoteBodyTextView: NSViewRepresentable {
             name: .focusNoteBodyAtEnd,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleToggleTaskAtCursor(_:)),
+            name: .toggleTaskAtCursor,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleInsertTaskAtCursor(_:)),
+            name: .insertTaskAtCursor,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleSetTaskPriorityAtCursor(_:)),
+            name: .setTaskPriorityAtCursor,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.handleApplyTaskDeadlineAtCursor(_:)),
+            name: .applyTaskDeadlineAtCursor,
+            object: nil
+        )
 
         return scrollView
     }
@@ -353,8 +377,10 @@ struct NoteBodyTextView: NSViewRepresentable {
             // While typing, NSTextView is source of truth. A store-driven re-render can
             // arrive with a stale SwiftUI binding (still "") before @State catches up;
             // applying that would clamp the caret to 0 — noticeable on a brand-new note.
+            // Still sync a checkbox toggle from the task list while the body is focused.
             let isEditing = textView.window?.firstResponder === textView
-            if noteChanged || !isEditing {
+            let allowWhileEditing = Self.isSingleCheckboxToggle(from: textView.string, to: text)
+            if noteChanged || !isEditing || allowWhileEditing {
                 let selected = textView.selectedRange()
                 textView.string = text
                 if noteChanged, !keepCaret {
@@ -386,6 +412,30 @@ struct NoteBodyTextView: NSViewRepresentable {
         NotificationCenter.default.removeObserver(coordinator)
     }
 
+    /// True when `new` differs from `old` only by flipping one task checkbox.
+    private static func isSingleCheckboxToggle(from old: String, to new: String) -> Bool {
+        let oldLines = old.split(separator: "\n", omittingEmptySubsequences: false)
+        let newLines = new.split(separator: "\n", omittingEmptySubsequences: false)
+        guard oldLines.count == newLines.count else { return false }
+
+        var diffCount = 0
+        for (oldLine, newLine) in zip(oldLines, newLines) where oldLine != newLine {
+            diffCount += 1
+            guard diffCount == 1 else { return false }
+            guard let parsedOld = TaskMarkdown.parseLine(String(oldLine)),
+                  let parsedNew = TaskMarkdown.parseLine(String(newLine)),
+                  parsedOld.text == parsedNew.text else {
+                return false
+            }
+            // Checkbox toggle or priority/deadline rewrite on the same task title.
+            let doneChanged = parsedOld.isDone != parsedNew.isDone
+            let metaChanged = parsedOld.priority != parsedNew.priority
+                || parsedOld.deadline != parsedNew.deadline
+            guard doneChanged || metaChanged else { return false }
+        }
+        return diffCount == 1
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NoteBodyTextView
         var noteID: URL?
@@ -415,6 +465,62 @@ struct NoteBodyTextView: NSViewRepresentable {
                     textView.scrollRangeToVisible(NSRange(location: length, length: 0))
                 }
             }
+        }
+
+        @objc func handleToggleTaskAtCursor(_ notification: Notification) {
+            guard let textView, textView.window?.firstResponder === textView else { return }
+            let body = textView.string
+            let offset = textView.selectedRange().location
+            let line = TaskMarkdown.lineIndex(forUTF16Offset: offset, in: body)
+            guard let newBody = TaskMarkdown.toggleCheckbox(in: body, lineIndex: line) else {
+                return
+            }
+            applyBody(newBody, caretUTF16: min(offset, (newBody as NSString).length), in: textView)
+        }
+
+        @objc func handleInsertTaskAtCursor(_ notification: Notification) {
+            guard let textView, textView.window?.firstResponder === textView else { return }
+            let body = textView.string
+            let offset = textView.selectedRange().location
+            let result = TaskMarkdown.insertOpenTask(in: body, utf16Offset: offset, above: false)
+            applyBody(result.body, caretUTF16: result.caretUTF16, in: textView)
+        }
+
+        @objc func handleSetTaskPriorityAtCursor(_ notification: Notification) {
+            guard let textView, textView.window?.firstResponder === textView else { return }
+            let body = textView.string
+            let offset = textView.selectedRange().location
+            let line = TaskMarkdown.lineIndex(forUTF16Offset: offset, in: body)
+            let priority = notification.userInfo?[TaskPriorityUserInfo.key] as? Int
+            guard let newBody = TaskMarkdown.setPriority(in: body, lineIndex: line, priority: priority) else {
+                return
+            }
+            applyBody(newBody, caretUTF16: min(offset, (newBody as NSString).length), in: textView)
+        }
+
+        @objc func handleApplyTaskDeadlineAtCursor(_ notification: Notification) {
+            guard let textView, textView.window?.firstResponder === textView else { return }
+            let body = textView.string
+            let offset = textView.selectedRange().location
+            let line = TaskMarkdown.lineIndex(forUTF16Offset: offset, in: body)
+            let clear = (notification.userInfo?[TaskDeadlineUserInfo.clearKey] as? Bool) ?? false
+            let deadline: Date? = clear
+                ? nil
+                : notification.userInfo?[TaskDeadlineUserInfo.key] as? Date
+            guard let newBody = TaskMarkdown.setDeadline(in: body, lineIndex: line, deadline: deadline) else {
+                return
+            }
+            applyBody(newBody, caretUTF16: min(offset, (newBody as NSString).length), in: textView)
+        }
+
+        private func applyBody(_ newBody: String, caretUTF16: Int, in textView: FocusAwareTextView) {
+            textView.string = newBody
+            let maxLength = (newBody as NSString).length
+            let location = min(max(caretUTF16, 0), maxLength)
+            textView.setSelectedRange(NSRange(location: location, length: 0))
+            textView.scrollRangeToVisible(NSRange(location: location, length: 0))
+            parent.text = newBody
+            parent.onTextChange(newBody)
         }
     }
 }

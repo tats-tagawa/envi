@@ -65,6 +65,57 @@ struct EnviApp: App {
 
                 Divider()
 
+                Button("Toggle Task") {
+                    NotificationCenter.default.post(name: .toggleTaskAtCursor, object: nil)
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+
+                Button("Insert Task") {
+                    NotificationCenter.default.post(name: .insertTaskAtCursor, object: nil)
+                }
+                .keyboardShortcut(.return, modifiers: [.command, .shift])
+
+                Button("Set Task Priority 1") {
+                    NotificationCenter.default.post(
+                        name: .setTaskPriorityAtCursor,
+                        object: nil,
+                        userInfo: [TaskPriorityUserInfo.key: 1]
+                    )
+                }
+                .keyboardShortcut("1", modifiers: [.control, .command])
+
+                Button("Set Task Priority 2") {
+                    NotificationCenter.default.post(
+                        name: .setTaskPriorityAtCursor,
+                        object: nil,
+                        userInfo: [TaskPriorityUserInfo.key: 2]
+                    )
+                }
+                .keyboardShortcut("2", modifiers: [.control, .command])
+
+                Button("Set Task Priority 3") {
+                    NotificationCenter.default.post(
+                        name: .setTaskPriorityAtCursor,
+                        object: nil,
+                        userInfo: [TaskPriorityUserInfo.key: 3]
+                    )
+                }
+                .keyboardShortcut("3", modifiers: [.control, .command])
+
+                Button("Clear Task Priority") {
+                    NotificationCenter.default.post(
+                        name: .setTaskPriorityAtCursor,
+                        object: nil,
+                        userInfo: [:]
+                    )
+                }
+                .keyboardShortcut("0", modifiers: [.control, .command])
+
+                Button("Set Task Deadline…") {
+                    NotificationCenter.default.post(name: .requestTaskDeadlineSheet, object: nil)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+
                 Button("Next Note") {
                     NotificationCenter.default.post(NoteHighlightDelta.notification(delta: 1))
                 }
@@ -74,6 +125,13 @@ struct EnviApp: App {
                     NotificationCenter.default.post(NoteHighlightDelta.notification(delta: -1))
                 }
                 .keyboardShortcut("k", modifiers: .command)
+            }
+
+            CommandMenu("View") {
+                Button("Toggle Task Mode") {
+                    NotificationCenter.default.post(name: .toggleTaskMode, object: nil)
+                }
+                .keyboardShortcut("t", modifiers: [.control, .command])
             }
         }
 

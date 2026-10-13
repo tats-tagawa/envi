@@ -203,4 +203,5 @@ final class VimEngineTests: XCTestCase {
         XCTAssertEqual(textView.string, "foo\n\nbar")
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
     }
+
 }

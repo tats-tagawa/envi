@@ -28,8 +28,35 @@ extension Notification.Name {
     /// Asks the body text view to become first responder and put the caret at the end.
     static let focusNoteBodyAtEnd = Notification.Name("Envi.focusNoteBodyAtEnd")
 
+    /// ⌃⌘T — sticky Task mode (list tasks / create task notes).
+    static let toggleTaskMode = Notification.Name("Envi.toggleTaskMode")
+
+    /// ⌘Return — toggle the GFM checkbox on the current body line.
+    static let toggleTaskAtCursor = Notification.Name("Envi.toggleTaskAtCursor")
+
+    /// ⌘⇧Return — insert `- [ ] ` at/near the caret in the body.
+    static let insertTaskAtCursor = Notification.Name("Envi.insertTaskAtCursor")
+
+    /// ⌃⌘1/2/3/0 — set or clear priority on the current task line (`userInfo["priority"]`).
+    static let setTaskPriorityAtCursor = Notification.Name("Envi.setTaskPriorityAtCursor")
+
+    /// ⌘⇧D — ask the main window to present the deadline sheet.
+    static let requestTaskDeadlineSheet = Notification.Name("Envi.requestTaskDeadlineSheet")
+
+    /// Apply deadline from the sheet (`userInfo["deadline"]` as Date, or `clear` to remove).
+    static let applyTaskDeadlineAtCursor = Notification.Name("Envi.applyTaskDeadlineAtCursor")
+
     /// Flush debounced note saves (quit / resign active).
     static let flushPendingNotes = Notification.Name("Envi.flushPendingNotes")
+}
+
+enum TaskPriorityUserInfo {
+    static let key = "priority"
+}
+
+enum TaskDeadlineUserInfo {
+    static let key = "deadline"
+    static let clearKey = "clear"
 }
 
 enum NoteHighlightDelta {

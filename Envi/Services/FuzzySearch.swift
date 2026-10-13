@@ -158,4 +158,83 @@ enum FuzzySearch {
         }
         return base * 2
     }
+
+    // MARK: - Tasks
+
+    /// Empty query → open tasks first (priority, then deadline, then recency), then done (dimmed).
+    /// Non-empty → matches first by score, then non-matches; open before done within a tier.
+    static func rankTasks(_ tasks: [TaskItem], query: String) -> [RankedTask] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            let open = tasks
+                .filter { !$0.isDone }
+                .sorted(by: taskItemSort)
+                .map { RankedTask(task: $0, matchesQuery: true, score: 0) }
+            let done = tasks
+                .filter(\.isDone)
+                .sorted(by: taskItemSort)
+                .map { RankedTask(task: $0, matchesQuery: false, score: -1) }
+            return open + done
+        }
+
+        var matches: [RankedTask] = []
+        var nonMatches: [RankedTask] = []
+
+        for task in tasks {
+            if let best = bestTaskScore(query: trimmed, task: task) {
+                matches.append(RankedTask(task: task, matchesQuery: true, score: best))
+            } else {
+                nonMatches.append(RankedTask(task: task, matchesQuery: false, score: -1))
+            }
+        }
+
+        matches.sort(by: rankedTaskSort)
+        nonMatches.sort(by: rankedTaskSort)
+        return matches + nonMatches
+    }
+
+    static func navigableIndices(in ranked: [RankedTask], query: String) -> [Int] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return Array(ranked.indices)
+        }
+        return ranked.indices.filter { ranked[$0].matchesQuery }
+    }
+
+    private static func bestTaskScore(query: String, task: TaskItem) -> Int? {
+        let textScore = score(query: query, in: task.text)
+        let titleScore = score(query: query, in: task.noteTitle).map { $0 / 2 }
+        return [textScore, titleScore].compactMap { $0 }.max()
+    }
+
+    private static func rankedTaskSort(_ lhs: RankedTask, _ rhs: RankedTask) -> Bool {
+        if lhs.task.isDone != rhs.task.isDone {
+            return !lhs.task.isDone && rhs.task.isDone
+        }
+        if lhs.score != rhs.score { return lhs.score > rhs.score }
+        return taskItemSort(lhs.task, rhs.task)
+    }
+
+    /// Priority (1 first; missing last), then sooner deadline (missing last), then recency.
+    private static func taskItemSort(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
+        let lp = lhs.priority ?? Int.max
+        let rp = rhs.priority ?? Int.max
+        if lp != rp { return lp < rp }
+
+        switch (lhs.deadline, rhs.deadline) {
+        case let (l?, r?) where l != r:
+            return l < r
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            break
+        }
+
+        if lhs.text.count != rhs.text.count {
+            return lhs.text.count < rhs.text.count
+        }
+        return lhs.noteUpdatedAt > rhs.noteUpdatedAt
+    }
 }
