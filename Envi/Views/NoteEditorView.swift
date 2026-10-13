@@ -6,12 +6,14 @@ struct NoteEditorView: View {
     var editorFocus: FocusState<EditorFocusTarget?>.Binding
     var vimEnabled: Bool
     @Binding var vimMode: VimMode
+    @Environment(\.themeStore) private var themeStore
 
     @State private var bodyText = ""
     /// Tracks which note the local buffer belongs to (avoids cross-note bleed).
     @State private var editingNoteID: URL?
 
     var body: some View {
+        let theme = themeStore.resolvedColors
         Group {
             if let note {
                 NoteBodyTextView(
@@ -22,6 +24,9 @@ struct NoteEditorView: View {
                     preserveCaretForURL: nil,
                     onConsumedCaretPreserve: {},
                     vimMode: $vimMode,
+                    textColor: theme.textPrimary.nsColor,
+                    backgroundColor: theme.editorBackground.nsColor,
+                    insertionPointColor: theme.accent.nsColor,
                     onBecameFirstResponder: {
                         if editorFocus.wrappedValue != .body {
                             editorFocus.wrappedValue = .body
@@ -41,10 +46,11 @@ struct NoteEditorView: View {
                     systemImage: "doc.text",
                     description: Text("Search or create a note from the list.")
                 )
+                .foregroundStyle(theme.textSecondary.color)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(theme.editorBackground.color)
         .onChange(of: note?.fileURL) { _, _ in
             syncFromNote()
         }

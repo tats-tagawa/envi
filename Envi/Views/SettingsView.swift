@@ -3,8 +3,25 @@ import Carbon
 import SwiftUI
 
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            GeneralSettingsPane()
+                .tabItem { Label("General", systemImage: "gearshape") }
+
+            ColorSchemeSettingsPane()
+                .tabItem { Label("Color Scheme", systemImage: "paintpalette") }
+
+            KeyboardShortcutsSettingsPane()
+                .tabItem { Label("Keyboard Shortcuts", systemImage: "keyboard") }
+        }
+        .frame(width: 540, height: 520)
+    }
+}
+
+// MARK: - General
+
+private struct GeneralSettingsPane: View {
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
-    @AppStorage(AppearanceMode.storageKey) private var appearanceMode = AppearanceMode.system.rawValue
     @AppStorage("vimModeEnabled") private var vimModeEnabled = false
     @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     @AppStorage(ModifiedDateOrder.storageKey) private var dateOrder = ModifiedDateOrder.monthDayYear.rawValue
@@ -24,15 +41,6 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Appearance") {
-                Picker("Appearance", selection: $appearanceMode) {
-                    ForEach(AppearanceMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-            }
-
             Section("Layout") {
                 Picker("Layout", selection: $layoutMode) {
                     ForEach(LayoutMode.allCases) { mode in
@@ -105,7 +113,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420)
         .padding()
         .background(HotKeyRecorder(isRecording: $isRecordingHotKey) { event in
             let carbon = HotKeyDefaults.carbonModifiers(from: event.modifierFlags)
@@ -118,7 +125,142 @@ struct SettingsView: View {
     }
 }
 
-/// Captures the next key-down with modifiers while recording a global hotkey.
+// MARK: - Color Scheme
+
+private struct ColorSchemeSettingsPane: View {
+    @Environment(\.themeStore) private var themeStore
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Theme", selection: Binding(
+                    get: { themeStore.preset },
+                    set: { newValue in
+                        // Light↔dark flips recolor a lot of controls; skip transitions that hitch.
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            themeStore.preset = newValue
+                        }
+                    }
+                )) {
+                    ForEach(ThemePreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+
+                if themeStore.hasOverrides {
+                    Text("Some colors are customized for this theme.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button("Reset Colors") {
+                    themeStore.resetOverrides()
+                }
+                .disabled(!themeStore.hasOverrides)
+            }
+
+            Section("Colors") {
+                ForEach(AppThemeColors.Token.allCases) { token in
+                    ColorPicker(
+                        token.title,
+                        selection: themeStore.colorBinding(for: token),
+                        supportsOpacity: true
+                    )
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+}
+
+// MARK: - Keyboard Shortcuts
+
+private struct KeyboardShortcutsSettingsPane: View {
+    @Environment(\.shortcutStore) private var shortcutStore
+    @State private var recordingID: AppShortcutID?
+    @State private var conflictMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Remap shortcuts used by envi (Vim motions are not included).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset All") {
+                    shortcutStore.resetAll()
+                    conflictMessage = nil
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            if let conflictMessage {
+                Text(conflictMessage)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+
+            List {
+                ForEach(AppShortcutID.settingsOrdered) { id in
+                    HStack {
+                        Text(id.title)
+                        Spacer()
+                        Text(shortcutStore.binding(for: id).displayString)
+                            .font(.body.monospaced())
+                            .foregroundStyle(recordingID == id ? Color.accentColor : Color.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(recordingID == id
+                                          ? Color.accentColor.opacity(0.15)
+                                          : Color(nsColor: .controlBackgroundColor))
+                            )
+                        Button(recordingID == id ? "Cancel" : "Change…") {
+                            conflictMessage = nil
+                            recordingID = recordingID == id ? nil : id
+                        }
+                        .buttonStyle(.borderless)
+                        Button("Reset") {
+                            shortcutStore.reset(id)
+                            conflictMessage = nil
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!shortcutStore.isCustom(id) && shortcutStore.conflicts(for: id).isEmpty)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+        .background(ShortcutRecorder(
+            recordingID: $recordingID,
+            onCapture: { id, binding in
+                shortcutStore.setBinding(binding, for: id)
+                let conflicts = shortcutStore.conflicts(for: id)
+                if conflicts.isEmpty {
+                    conflictMessage = nil
+                } else {
+                    let names = conflicts.map(\.title).joined(separator: ", ")
+                    conflictMessage = "Also used by: \(names). Change one of them if both fire."
+                }
+                recordingID = nil
+            },
+            onCancel: {
+                recordingID = nil
+            }
+        ))
+    }
+}
+
+// MARK: - Recorders
+
 private struct HotKeyRecorder: NSViewRepresentable {
     @Binding var isRecording: Bool
     var onCapture: (NSEvent) -> Void
@@ -138,16 +280,15 @@ private struct HotKeyRecorder: NSViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> HotKeyCoordinator { HotKeyCoordinator() }
 
-    final class Coordinator {
+    final class HotKeyCoordinator {
         var onCapture: ((NSEvent) -> Void)?
         private var monitor: Any?
 
         func start() {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                // Ignore bare modifier taps.
                 let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 guard !flags.isEmpty else { return event }
                 if event.keyCode == UInt16(kVK_Escape) {
@@ -165,8 +306,62 @@ private struct HotKeyRecorder: NSViewRepresentable {
             }
         }
 
-        deinit {
-            stop()
+        deinit { stop() }
+    }
+}
+
+private struct ShortcutRecorder: NSViewRepresentable {
+    @Binding var recordingID: AppShortcutID?
+    var onCapture: (AppShortcutID, AppShortcutBinding) -> Void
+    var onCancel: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.onCapture = onCapture
+        context.coordinator.onCancel = onCancel
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onCapture = onCapture
+        context.coordinator.onCancel = onCancel
+        context.coordinator.recordingID = recordingID
+        if recordingID != nil {
+            context.coordinator.start()
+        } else {
+            context.coordinator.stop()
         }
+    }
+
+    func makeCoordinator() -> ShortcutCoordinator { ShortcutCoordinator() }
+
+    final class ShortcutCoordinator {
+        var onCapture: ((AppShortcutID, AppShortcutBinding) -> Void)?
+        var onCancel: (() -> Void)?
+        var recordingID: AppShortcutID?
+        private var monitor: Any?
+
+        func start() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, let id = self.recordingID else { return event }
+                if event.keyCode == UInt16(kVK_Escape) {
+                    self.onCancel?()
+                    return nil
+                }
+                guard let binding = AppShortcutBinding.from(event: event) else { return nil }
+                self.onCapture?(id, binding)
+                return nil
+            }
+        }
+
+        func stop() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit { stop() }
     }
 }

@@ -267,6 +267,9 @@ struct NoteBodyTextView: NSViewRepresentable {
     var preserveCaretForURL: URL?
     var onConsumedCaretPreserve: () -> Void = {}
     @Binding var vimMode: VimMode
+    var textColor: NSColor = .textColor
+    var backgroundColor: NSColor = .textBackgroundColor
+    var insertionPointColor: NSColor = .textColor
     @AppStorage("vimJKMovesByDisplayLines") private var vimJKMovesByDisplayLines = true
     var onBecameFirstResponder: () -> Void
     var onTextChange: (String) -> Void
@@ -303,6 +306,11 @@ struct NoteBodyTextView: NSViewRepresentable {
         textView.string = text
         textView.vimEnabled = vimEnabled
         textView.vimJKMovesByDisplayLines = vimJKMovesByDisplayLines
+        textView.textColor = textColor
+        textView.backgroundColor = backgroundColor
+        textView.insertionPointColor = insertionPointColor
+        textView.drawsBackground = true
+        scrollView.backgroundColor = backgroundColor
         textView.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onBecameFirstResponder()
         }
@@ -354,6 +362,11 @@ struct NoteBodyTextView: NSViewRepresentable {
         context.coordinator.parent = self
         textView.vimEnabled = vimEnabled
         textView.vimJKMovesByDisplayLines = vimJKMovesByDisplayLines
+        textView.textColor = textColor
+        textView.backgroundColor = backgroundColor
+        textView.insertionPointColor = insertionPointColor
+        textView.drawsBackground = true
+        scrollView.backgroundColor = backgroundColor
         textView.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in
             coordinator?.parent.onBecameFirstResponder()
         }

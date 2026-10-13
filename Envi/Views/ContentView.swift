@@ -11,6 +11,7 @@ private enum SearchFieldMode: Equatable {
 
 struct ContentView: View {
     @Bindable var store: NotesFolderStore
+    @Environment(\.themeStore) private var themeStore
     @State private var searchText = ""
     @State private var savedSearchText = ""
     @State private var searchMode: SearchFieldMode = .querying
@@ -208,6 +209,7 @@ struct ContentView: View {
         }
         // Tear down HSplitView/VSplitView so pane min-widths do not stick on the window.
         .id(resolvedLayoutMode)
+        .background(themeStore.resolvedColors.windowBackground.color)
         .onAppear {
             editorFocus = .search
             syncSelectionToHighlight()
@@ -256,7 +258,7 @@ struct ContentView: View {
                 StatusBarView(vimMode: vimMode)
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(themeStore.resolvedColors.editorBackground.color)
     }
 
     // MARK: - Search / title field (NV model)
