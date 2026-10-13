@@ -22,6 +22,9 @@ struct ContentView: View {
     @State private var listInlineEdit: ResultsInlineEdit?
     @State private var notePendingDeletion: Note?
     @State private var renameCollisionMessage: String?
+    @State private var isTaskMode = false
+    @State private var showDeadlineSheet = false
+    @State private var deadlineDraft = Date()
     @FocusState private var editorFocus: EditorFocusTarget?
     @AppStorage("layoutMode") private var layoutMode = LayoutMode.sidebar.rawValue
     /// Fresh key so prior default-on installs pick up Vim-off without a Settings visit.
@@ -50,6 +53,10 @@ struct ContentView: View {
             return ranked.sorted(using: sortOrder)
         }
         return ranked
+    }
+
+    private var displayedTasks: [RankedTask] {
+        FuzzySearch.rankTasks(store.taskItems, query: rankingQuery)
     }
 
     private var resolvedLayoutMode: LayoutMode {
@@ -142,6 +149,35 @@ struct ContentView: View {
             let delta = note.userInfo?[NoteHighlightDelta.userInfoKey] as? Int ?? 0
             moveHighlight(by: delta)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleTaskMode)) { _ in
+            toggleTaskMode()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestTaskDeadlineSheet)) { _ in
+            deadlineDraft = Calendar.current.startOfDay(for: Date())
+            showDeadlineSheet = true
+        }
+        .sheet(isPresented: $showDeadlineSheet) {
+            TaskDeadlineSheet(
+                date: $deadlineDraft,
+                onClear: {
+                    showDeadlineSheet = false
+                    NotificationCenter.default.post(
+                        name: .applyTaskDeadlineAtCursor,
+                        object: nil,
+                        userInfo: [TaskDeadlineUserInfo.clearKey: true]
+                    )
+                },
+                onSet: {
+                    showDeadlineSheet = false
+                    NotificationCenter.default.post(
+                        name: .applyTaskDeadlineAtCursor,
+                        object: nil,
+                        userInfo: [TaskDeadlineUserInfo.key: deadlineDraft]
+                    )
+                },
+                onCancel: { showDeadlineSheet = false }
+            )
+        }
     }
 
     @ViewBuilder
@@ -180,7 +216,9 @@ struct ContentView: View {
 
     private var notesPane: some View {
         SidebarView(
+            isTaskMode: isTaskMode,
             displayedNotes: displayedNotes,
+            displayedTasks: displayedTasks,
             searchText: $searchText,
             highlightedIndex: $highlightedIndex,
             sortOrder: $sortOrder,
@@ -197,6 +235,7 @@ struct ContentView: View {
             onCommitTitle: commitListTitle,
             onCommitTags: commitListTags,
             onBeginDelete: beginDelete(at:),
+            onToggleTask: toggleTaskFromList,
             reconcileSearchChanges: !isSettingSearchProgrammatically,
             emphasizeSelection: editorFocus == .search || editorFocus == nil
         )
@@ -264,7 +303,23 @@ struct ContentView: View {
         focusSearch(selectAll: true)
     }
 
+    private func toggleTaskMode() {
+        isTaskMode.toggle()
+        listInlineEdit = nil
+        highlightedIndex = 0
+        if searchMode == .showingTitle {
+            searchMode = .querying
+            setSearchProgrammatically(savedSearchText)
+        }
+        focusSearch(selectAll: true)
+    }
+
+    private func toggleTaskFromList(_ ranked: RankedTask) {
+        store.toggleTask(noteID: ranked.task.noteURL, lineIndex: ranked.task.lineIndex)
+    }
+
     private func beginRenameSelected() {
+        guard !isTaskMode else { return }
         guard let id = store.selectedNoteID,
               let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == id }) else { return }
         selectIndex(idx)
@@ -272,6 +327,7 @@ struct ContentView: View {
     }
 
     private func beginEditTagsSelected() {
+        guard !isTaskMode else { return }
         guard let id = store.selectedNoteID,
               let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == id }) else { return }
         selectIndex(idx)
@@ -284,6 +340,7 @@ struct ContentView: View {
     }
 
     private func beginDelete(at index: Int) {
+        guard !isTaskMode else { return }
         guard displayedNotes.indices.contains(index) else { return }
         notePendingDeletion = displayedNotes[index].note
     }
@@ -321,7 +378,9 @@ struct ContentView: View {
     // MARK: - Navigation
 
     private func moveHighlight(by delta: Int) {
-        let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
+        let navigable = isTaskMode
+            ? FuzzySearch.navigableIndices(in: displayedTasks, query: rankingQuery)
+            : FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         guard !navigable.isEmpty else {
             highlightedIndex = 0
             return
@@ -333,6 +392,16 @@ struct ContentView: View {
     }
 
     private func selectIndex(_ index: Int) {
+        if isTaskMode {
+            guard displayedTasks.indices.contains(index) else { return }
+            highlightedIndex = index
+            let task = displayedTasks[index].task
+            guard let note = store.notes.first(where: { $0.fileURL == task.noteURL }) else { return }
+            store.select(note)
+            adoptSearchTitle(from: note)
+            return
+        }
+
         guard displayedNotes.indices.contains(index) else { return }
         highlightedIndex = index
         let note = displayedNotes[index].note
@@ -342,6 +411,18 @@ struct ContentView: View {
 
     /// Keep store selection aligned with the highlight while the user is typing a query.
     private func highlightIndex(_ index: Int) {
+        if isTaskMode {
+            guard displayedTasks.indices.contains(index) else { return }
+            highlightedIndex = index
+            let task = displayedTasks[index].task
+            guard let note = store.notes.first(where: { $0.fileURL == task.noteURL }) else { return }
+            store.select(note)
+            if searchMode == .showingTitle {
+                adoptSearchTitle(from: note)
+            }
+            return
+        }
+
         guard displayedNotes.indices.contains(index) else { return }
         highlightedIndex = index
         let note = displayedNotes[index].note
@@ -353,7 +434,9 @@ struct ContentView: View {
 
     /// Return in the search field: open a match, or create when nothing matches.
     private func activateSearch() {
-        let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
+        let navigable = isTaskMode
+            ? FuzzySearch.navigableIndices(in: displayedTasks, query: rankingQuery)
+            : FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         // While showing a selected title with an empty ranking query, Return edits the body.
         if searchMode == .showingTitle, store.selectedNote != nil {
             focusBodyAtEnd()
@@ -368,8 +451,18 @@ struct ContentView: View {
         if !navigable.contains(highlightedIndex) {
             highlightedIndex = navigable[0]
         }
-        guard displayedNotes.indices.contains(highlightedIndex) else { return }
 
+        if isTaskMode {
+            guard displayedTasks.indices.contains(highlightedIndex) else { return }
+            let task = displayedTasks[highlightedIndex].task
+            guard let note = store.notes.first(where: { $0.fileURL == task.noteURL }) else { return }
+            store.select(note)
+            adoptSearchTitle(from: note)
+            focusBodyAtEnd()
+            return
+        }
+
+        guard displayedNotes.indices.contains(highlightedIndex) else { return }
         let note = displayedNotes[highlightedIndex].note
         store.select(note)
         adoptSearchTitle(from: note)
@@ -378,12 +471,22 @@ struct ContentView: View {
 
     private func createFromSearch() {
         let title = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let note = store.createNote(title: title) else { return }
+        let note: Note?
+        if isTaskMode {
+            note = store.createTask(title: title)
+        } else {
+            note = store.createNote(title: title)
+        }
+        guard let note else { return }
         // NV keeps the new title in the search/title field.
         savedSearchText = ""
         searchMode = .showingTitle
         setSearchProgrammatically(note.title)
-        if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
+        if isTaskMode {
+            if let idx = displayedTasks.firstIndex(where: { $0.task.noteURL == note.fileURL }) {
+                highlightedIndex = idx
+            }
+        } else if let idx = displayedNotes.firstIndex(where: { $0.note.fileURL == note.fileURL }) {
             highlightedIndex = idx
         }
         store.select(note)
@@ -398,6 +501,20 @@ struct ContentView: View {
     }
 
     private func syncSelectionToHighlight() {
+        if isTaskMode {
+            let navigable = FuzzySearch.navigableIndices(in: displayedTasks, query: rankingQuery)
+            guard let first = navigable.first else { return }
+            if store.selectedNoteID == nil {
+                highlightedIndex = first
+            } else if let selected = store.selectedNote {
+                adoptSearchTitle(from: selected)
+                if let idx = displayedTasks.firstIndex(where: { $0.task.noteURL == selected.fileURL }) {
+                    highlightedIndex = idx
+                }
+            }
+            return
+        }
+
         let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         guard let first = navigable.first else { return }
         if store.selectedNoteID == nil {
@@ -409,6 +526,38 @@ struct ContentView: View {
                 highlightedIndex = idx
             }
         }
+    }
+}
+
+private struct TaskDeadlineSheet: View {
+    @Binding var date: Date
+    var onClear: () -> Void
+    var onSet: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Task Deadline")
+                .font(.headline)
+            DatePicker(
+                "Due date",
+                selection: $date,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+
+            HStack {
+                Button("Clear", role: .destructive, action: onClear)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Set", action: onSet)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 320)
     }
 }
 

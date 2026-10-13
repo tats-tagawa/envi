@@ -43,6 +43,11 @@ final class NotesFolderStore {
         return notes.first { $0.fileURL == selectedNoteID }
     }
 
+    /// Derived GFM checkbox tasks across all notes (rebuilt whenever `notes` changes).
+    var taskItems: [TaskItem] {
+        notes.flatMap { TaskMarkdown.tasks(in: $0) }
+    }
+
     var hasFolder: Bool { folderURL != nil }
 
     init() {
@@ -298,18 +303,18 @@ final class NotesFolderStore {
     // MARK: - CRUD
 
     @discardableResult
-    func createNote(title: String = "") -> Note? {
+    func createNote(title: String = "", body: String = "") -> Note? {
         guard let folderURL else { return nil }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let url = uniqueFileURL(forTitle: trimmed, in: folderURL)
         do {
-            try "".write(to: url, atomically: true, encoding: .utf8)
+            try body.write(to: url, atomically: true, encoding: .utf8)
             suppressReloadBriefly()
             let timestamps = Note.fileTimestamps(for: url)
             let note = Note(
                 fileURL: url,
                 title: url.deletingPathExtension().lastPathComponent,
-                body: "",
+                body: body,
                 tags: [],
                 createdAt: timestamps.created,
                 updatedAt: timestamps.updated
@@ -321,6 +326,23 @@ final class NotesFolderStore {
             errorMessage = "Could not create note: \(error.localizedDescription)"
             return nil
         }
+    }
+
+    /// Creates a dedicated task note whose body is a single open checkbox line.
+    @discardableResult
+    func createTask(title: String) -> Note? {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = TaskMarkdown.openTaskBody(text: trimmed)
+        return createNote(title: trimmed, body: body)
+    }
+
+    /// Flips the checkbox on `lineIndex` in the note body. No-op if that line is not a task.
+    func toggleTask(noteID: URL, lineIndex: Int) {
+        guard let note = notes.first(where: { $0.fileURL == noteID }) else { return }
+        guard let newBody = TaskMarkdown.toggleCheckbox(in: note.body, lineIndex: lineIndex) else {
+            return
+        }
+        updateBody(newBody, for: noteID)
     }
 
     func select(_ note: Note?) {

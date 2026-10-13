@@ -8,7 +8,9 @@ enum ResultsInlineEdit: Equatable {
 }
 
 struct SidebarView: View {
+    var isTaskMode: Bool
     let displayedNotes: [RankedNote]
+    let displayedTasks: [RankedTask]
     @Binding var searchText: String
     @Binding var highlightedIndex: Int
     @Binding var sortOrder: [KeyPathComparator<RankedNote>]
@@ -28,6 +30,7 @@ struct SidebarView: View {
     var onCommitTitle: (URL, String) -> Void
     var onCommitTags: (URL, String) -> Void
     var onBeginDelete: (Int) -> Void
+    var onToggleTask: (RankedTask) -> Void
     /// False while ContentView is writing the search field itself (⌘D, selection title).
     var reconcileSearchChanges: Bool = true
     /// Stronger selected-row emphasis while the search/list is key; quieter while writing.
@@ -48,6 +51,10 @@ struct SidebarView: View {
         return displayedNotes.contains { !$0.tagsDisplay.isEmpty }
     }
 
+    private var searchPlaceholder: String {
+        isTaskMode ? "Search or create task…" : "Search or create…"
+    }
+
     private var tableSelection: Binding<Set<RankedNote.ID>> {
         Binding(
             get: {
@@ -62,9 +69,27 @@ struct SidebarView: View {
         )
     }
 
+    private var taskTableSelection: Binding<Set<RankedTask.ID>> {
+        Binding(
+            get: {
+                guard let selectedNoteID,
+                      displayedTasks.indices.contains(highlightedIndex),
+                      displayedTasks[highlightedIndex].task.noteURL == selectedNoteID else {
+                    return []
+                }
+                return [displayedTasks[highlightedIndex].id]
+            },
+            set: { newValue in
+                guard let id = newValue.first,
+                      let index = displayedTasks.firstIndex(where: { $0.id == id }) else { return }
+                onSelectIndex(index)
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            TextField("Search or create…", text: $searchText)
+            TextField(searchPlaceholder, text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .focused(editorFocus, equals: .search)
                 .padding(.horizontal, 12)
@@ -80,21 +105,27 @@ struct SidebarView: View {
                 }
 
             ZStack {
-                notesTable
-                    .tableStyle(.bordered)
-                    .alternatingRowBackgrounds(.enabled)
-                    .contextMenu(forSelectionType: RankedNote.ID.self) { ids in
-                        if let id = ids.first,
-                           let index = displayedNotes.firstIndex(where: { $0.id == id }) {
-                            Button("Rename") { beginInlineEdit(.title(id), at: index) }
-                            Button("Edit Tags…") { beginInlineEdit(.tags(id), at: index) }
-                            Divider()
-                            Button("Move to Trash", role: .destructive) { onBeginDelete(index) }
+                if isTaskMode {
+                    tasksTable
+                        .tableStyle(.bordered)
+                        .alternatingRowBackgrounds(.enabled)
+                } else {
+                    notesTable
+                        .tableStyle(.bordered)
+                        .alternatingRowBackgrounds(.enabled)
+                        .contextMenu(forSelectionType: RankedNote.ID.self) { ids in
+                            if let id = ids.first,
+                               let index = displayedNotes.firstIndex(where: { $0.id == id }) {
+                                Button("Rename") { beginInlineEdit(.title(id), at: index) }
+                                Button("Edit Tags…") { beginInlineEdit(.tags(id), at: index) }
+                                Divider()
+                                Button("Move to Trash", role: .destructive) { onBeginDelete(index) }
+                            }
                         }
-                    }
+                }
 
-                if displayedNotes.isEmpty {
-                    Text("Type to search or create")
+                if isTaskMode ? displayedTasks.isEmpty : displayedNotes.isEmpty {
+                    Text(isTaskMode ? "Type to search or create a task" : "Type to search or create")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -102,9 +133,18 @@ struct SidebarView: View {
                 }
             }
             .onChange(of: displayedNotes.count) { _, _ in
+                guard !isTaskMode else { return }
+                reconcileHighlight(keeping: selectedNoteID)
+            }
+            .onChange(of: displayedTasks.count) { _, _ in
+                guard isTaskMode else { return }
+                reconcileHighlight(keeping: selectedNoteID)
+            }
+            .onChange(of: isTaskMode) { _, _ in
                 reconcileHighlight(keeping: selectedNoteID)
             }
             .onChange(of: sortOrder) { _, _ in
+                guard !isTaskMode else { return }
                 reconcileHighlight(keeping: selectedNoteID)
             }
             .onChange(of: inlineEdit) { _, newValue in
@@ -166,6 +206,94 @@ struct SidebarView: View {
                 .width(min: 100, ideal: 130)
             }
         }
+    }
+
+    private var tasksTable: some View {
+        Table(displayedTasks, selection: taskTableSelection) {
+            TableColumn("Task") { ranked in
+                taskCell(for: ranked)
+            }
+            .width(min: 140, ideal: 220)
+
+            TableColumn("P") { ranked in
+                Text(ranked.task.priority.map { "P\($0)" } ?? " ")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .width(min: 28, ideal: 36)
+
+            TableColumn("Due") { ranked in
+                dueCell(for: ranked)
+            }
+            .width(min: 64, ideal: 80)
+
+            TableColumn("Note") { ranked in
+                Text(ranked.task.noteTitle)
+                    .font(.callout)
+                    .foregroundStyle(ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .width(min: 80, ideal: 120)
+        }
+    }
+
+    private func dueCell(for ranked: RankedTask) -> some View {
+        let label: String
+        let overdue: Bool
+        if let deadline = ranked.task.deadline {
+            label = Self.dueFormatter.string(from: deadline)
+            let startToday = Calendar.current.startOfDay(for: Date())
+            overdue = !ranked.task.isDone && deadline < startToday
+        } else {
+            label = " "
+            overdue = false
+        }
+        return Text(label)
+            .font(.callout)
+            .foregroundStyle(
+                overdue
+                    ? Color.red.opacity(ranked.matchesQuery ? 1 : 0.7)
+                    : (ranked.matchesQuery ? Color.secondary : Color.secondary.opacity(0.55))
+            )
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private static let dueFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("MMMd")
+        return f
+    }()
+
+    private func taskCell(for ranked: RankedTask) -> some View {
+        let isSelected = ranked.task.noteURL == selectedNoteID
+            && displayedTasks.indices.contains(highlightedIndex)
+            && displayedTasks[highlightedIndex].id == ranked.id
+        return HStack(spacing: 8) {
+            Button {
+                onToggleTask(ranked)
+            } label: {
+                Image(systemName: ranked.task.isDone ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(ranked.task.isDone ? Color.accentColor : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(ranked.task.isDone ? "Mark as not done" : "Mark as done")
+
+            Text(ranked.task.text.isEmpty ? "Untitled" : ranked.task.text)
+                .font(.callout.weight(isSelected && emphasizeSelection ? .semibold : .regular))
+                .strikethrough(ranked.task.isDone, color: .secondary)
+                .foregroundStyle(
+                    ranked.matchesQuery
+                        ? (isSelected ? Color.primary : Color.primary.opacity(emphasizeSelection ? 1 : 0.9))
+                        : Color.secondary
+                )
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private func dateCell(for ranked: RankedNote) -> some View {
@@ -330,6 +458,14 @@ struct SidebarView: View {
     }
 
     private func reconcileHighlight(keeping preferredID: URL?) {
+        if isTaskMode {
+            reconcileTaskHighlight(keeping: preferredID)
+        } else {
+            reconcileNoteHighlight(keeping: preferredID)
+        }
+    }
+
+    private func reconcileNoteHighlight(keeping preferredID: URL?) {
         let navigable = FuzzySearch.navigableIndices(in: displayedNotes, query: rankingQuery)
         guard !navigable.isEmpty else {
             highlightedIndex = 0
@@ -352,6 +488,34 @@ struct SidebarView: View {
 
         let newID = displayedNotes[highlightedIndex].note.fileURL
         // A cleared selection (⌘D) must not immediately reselect the highlighted row.
+        guard let preferredID else { return }
+        if newID != previousID || newID != preferredID {
+            onHighlightIndex(highlightedIndex)
+        }
+    }
+
+    private func reconcileTaskHighlight(keeping preferredID: URL?) {
+        let navigable = FuzzySearch.navigableIndices(in: displayedTasks, query: rankingQuery)
+        guard !navigable.isEmpty else {
+            highlightedIndex = 0
+            return
+        }
+
+        let previousID = displayedTasks.indices.contains(highlightedIndex)
+            ? displayedTasks[highlightedIndex].task.noteURL
+            : nil
+
+        if let preferredID,
+           let idx = displayedTasks.firstIndex(where: { $0.task.noteURL == preferredID }),
+           navigable.contains(idx) {
+            highlightedIndex = idx
+        } else if navigable.contains(highlightedIndex) {
+            // Keep current highlight.
+        } else {
+            highlightedIndex = navigable[0]
+        }
+
+        let newID = displayedTasks[highlightedIndex].task.noteURL
         guard let preferredID else { return }
         if newID != previousID || newID != preferredID {
             onHighlightIndex(highlightedIndex)
